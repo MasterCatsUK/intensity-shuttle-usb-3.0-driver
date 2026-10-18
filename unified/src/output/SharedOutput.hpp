@@ -77,7 +77,7 @@ public:
 class Reader {
     int server=-1,fd=-1;unsigned mode;bool outputReady;Header header{};size_t headerRead=0,imageRead=0;std::vector<uint8_t> incoming,last,acks;size_t ackSent=0;
     struct Received {uint64_t sequence,hostNS;std::vector<uint8_t> image;Timecode timecode;};std::deque<Received> ready;
-    uint64_t receivedCount=0,playedCount=0;
+    uint64_t receivedCount=0,playedCount=0,pictureGeneration=UINT64_MAX;
     void disconnect(){if(fd>=0){close(fd);++generation;}fd=-1;headerRead=imageRead=ackSent=0;incoming.clear();acks.clear();ready.clear();}
     void flush(){while(fd>=0&&ackSent<acks.size()){ssize_t n=send(fd,acks.data()+ackSent,acks.size()-ackSent,0);if(n>0)ackSent+=size_t(n);else {if(n==0||(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR))disconnect();return;}}if(ackSent==acks.size()){acks.clear();ackSent=0;}}
 public:
@@ -98,8 +98,11 @@ public:
             if(imageRead==incoming.size()){ready.push_back({header.sequence,header.hostNS,std::move(incoming),header.timecode});++receivedCount;headerRead=imageRead=0;}
         }
     }
+    bool hasPicture()const{return !last.empty()&&receivedCount>0;}
+    bool hasCurrentPicture()const{return hasPicture()&&pictureGeneration==generation;}
+    bool connected()const{return fd>=0;}
     void read(std::vector<uint8_t>& image,unsigned width,unsigned height){
-        pump(width,height);acknowledge=false;if(!ready.empty()){sequence=ready.front().sequence;hostNS=ready.front().hostNS;last=std::move(ready.front().image);timecode=ready.front().timecode;ready.pop_front();acknowledge=true;}
+        pump(width,height);acknowledge=false;if(!ready.empty()){sequence=ready.front().sequence;hostNS=ready.front().hostNS;last=std::move(ready.front().image);pictureGeneration=generation;timecode=ready.front().timecode;ready.pop_front();acknowledge=true;}
         if(last.empty()){last.resize(size_t(width)*height*2);for(size_t n=0;n<last.size();n+=4){last[n]=last[n+2]=128;last[n+1]=last[n+3]=16;}}image=last;
     }
     void played(uint64_t seq,uint64_t ns,uint64_t connection){if(fd<0||connection!=generation)return;if(acks.size()-ackSent>1024*1024){disconnect();return;}++playedCount;Ack a{Magic,seq,ns};size_t at=acks.size();acks.resize(at+sizeof(a));memcpy(acks.data()+at,&a,sizeof(a));flush();}

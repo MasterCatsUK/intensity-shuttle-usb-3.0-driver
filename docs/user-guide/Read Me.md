@@ -1,249 +1,265 @@
-# Shuttle Camera 0.1.31 — Read Me
+# Shuttle Camera 0.1.39 — Read Me
 
 Installation & user guide · 18 October 2026
 
 ## Read this first
 
-**Shuttle Camera 0.1.31** · Installation and user guide · 18 October 2026
+**Shuttle Camera 0.1.39** - Installation and user guide - 18 October 2026
 
-Capture VHS and other standard-definition sources, play movie files through HDMI, or monitor Final Cut Pro and Premiere Pro through the USB 3 Intensity Shuttle.
+Capture PAL/NTSC VHS, play movie files, monitor Final Cut Pro or Premiere Pro, and send a Mac desktop through the Intensity Shuttle USB 3.0.
 
-> **Development build — security changes required.** The installer is unsigned; its app and extensions are ad-hoc signed and not Apple-notarized. This build requires SIP to be disabled. Apple describes disabling these checks as a temporary development measure, not a normal public-release setup. Read page 2 before deciding whether to install. [Apple: testing system extensions](https://developer.apple.com/documentation/driverkit/debugging-and-testing-system-extensions).
+> **Experimental development build.** The installer is unsigned; its components are ad-hoc signed and not notarized. The current installer requires SIP disabled. Read Security preparation before deciding to install. This is an independent project, not an official Blackmagic Design driver.
 
-### What you need
+### Requirements
 
-- An Apple-silicon Mac. This installer requires macOS 27 or later; testing was on a Mac Studio with macOS 27.0.1. Other machines and later macOS releases are not guaranteed.
-- A Blackmagic Intensity Shuttle **USB 3**, a working USB 3 cable/adapter, and administrator access. The Thunderbolt Shuttle and Intel Macs are not supported by this installer.
-- For VHS: a working VCR, S-Video or composite video, and red/white RCA audio cables. For output: a TV or monitor connected to the Shuttle’s HDMI OUT.
-- A current backup and permission to change security settings. Do not change security on a managed/work Mac without its administrator’s approval.
+- Apple-silicon Mac and macOS 27 or later. Testing was on one Mac Studio with macOS 27.0.1; other machines/releases are not comprehensively qualified.
+- Intensity Shuttle USB 3.0, working USB 3 cable/adapter, and administrator access. Intel Macs and the Thunderbolt Shuttle are not included.
+- VCR with S-Video or composite and RCA stereo for tape capture. A compatible TV/monitor or recorder for playback.
 
-### How it works
+### One device, two workflows
 
-Shuttle Camera configures the device. Record into a separate camera app such as QuickTime Player. For movie or editor HDMI output, leave Shuttle Camera open with output started. Capture and playback share the USB interface: use one at a time.
+The Capture tab configures the camera feed; record with a separate camera app such as QuickTime Player. Video Output sends movies, editor frames or a desktop to the device. Capture and playback share the USB interface: use one at a time.
 
-### Guide map
+### What is new
 
-| Page | Topic |
-| --- | --- |
-| 2 | Security preparation |
-| 3 | Install and enable the extensions |
-| 4 | Capture VHS |
-| 5 | HDMI movie playback and formats |
-| 6 | Final Cut Pro and Premiere Pro |
-| 7 | Sound, sync and overlays |
-| 8 | Troubleshooting and limitations |
-| 9 | Removal, security restoration and files |
+Live input picture adjustments, capture-resolution retention, idle pictures/movies with a delay, connector-format choices, desktop mirroring, experimental extended display, and Stretch that follows live desktop resolution changes.
 
-Screenshots show the real 0.1.31 interface with example settings. Your selected input, output device and positions may differ. This guide is independent of Blackmagic Design, Apple and Adobe; it is not their official driver documentation.
+The following pages cover security, installation, capture, Picture, movie output, Final Cut, Premiere, desktops, scaling, idle screens, audio/overlays, troubleshooting and removal. Screenshots are current native app views rendered with demonstration settings. They contain no personal footage; selected values are examples.
 
 ## Security preparation
 
-**Make this decision before installing.** SIP protects parts of macOS against unauthorized changes. Turning it off weakens protection across the Mac, not just this app. Developer mode relaxes extension validation. Neither setting makes downloaded software trustworthy. [Apple: disabling and enabling SIP](https://developer.apple.com/documentation/security/disabling-and-enabling-system-integrity-protection); [Apple: testing system extensions](https://developer.apple.com/documentation/driverkit/debugging-and-testing-system-extensions).
+SIP protects macOS. Disabling it weakens protection across the Mac. Apple describes this as temporary development use; restore it after testing. [Apple: disabling and enabling SIP](https://developer.apple.com/documentation/security/disabling-and-enabling-system-integrity-protection).
 
-### 1. Turn off SIP in Recovery — Apple silicon only
+### The tested development setup
 
-1. Save your work and shut down the Mac. Press and hold its power button until startup options appear. Choose **Options → Continue**; select an administrator and authenticate if asked.
-2. In Recovery, choose **Utilities → Terminal**. Enter the command below. Follow the displayed prompts for the intended startup system, then restart normally.
+1. Save work, back up important files and shut down. On Apple silicon, hold the power button until startup options appear. Choose **Options > Continue** and authenticate when requested. [Apple: Recovery on Apple silicon](https://support.apple.com/guide/mac-help/mchl82829c17/mac).
+2. In Recovery choose **Utilities > Terminal**. Run the following, then restart into normal macOS.
 
 ```sh
 csrutil disable
 ```
 
-These are Recovery instructions; running the command in an ordinary desktop Terminal will not complete the change. [Apple: Recovery on Apple silicon](https://support.apple.com/guide/mac-help/mchl82829c17/mac).
-
-### 2. Check the status in normal macOS
+Check the status in normal Terminal:
 
 ```sh
 csrutil status
 ```
 
-The installer checks for **System Integrity Protection status: disabled.** Do not use partial-disable flags as a substitute: this installer has not been qualified with them.
+The installer requires the fully disabled status; partial-disable combinations are not qualified. No supplied build script changes SIP. Building source alone does not require changing security.
 
-### 3. Enable extension developer mode
+### Extension developer mode
 
-In normal macOS, open Terminal and run:
+Apple describes developer mode as relaxing the location check for extensions loaded outside normal application directories. The supplied installer puts the host in Applications. For developers reproducing the outside-Applications build setup, the command is: [Apple: testing system extensions](https://developer.apple.com/documentation/driverkit/debugging-and-testing-system-extensions).
 
 ```sh
 sudo systemextensionsctl developer on
 ```
 
-Enter your Mac administrator password; Terminal does not show password characters. This is the development configuration used during testing. It is separate from SIP. [Apple: testing system extensions](https://developer.apple.com/documentation/driverkit/debugging-and-testing-system-extensions).
+This is separate from screen-recording permission. Do not use it as a generic fix for camera or microphone access.
 
-### What is not required
+### Restoration and limits
 
-These are camera system extensions and a Core Audio plug-in, not a kernel extension. This guide does not ask you to enable third-party kernel extensions, disable FileVault, disable authenticated-root protection or globally disable Gatekeeper. Follow the specific SIP procedure rather than unrelated kext instructions.
-
-> **Can SIP be turned on immediately afterwards?** Do not assume this build will continue working with SIP enabled. That configuration has not been qualified, and its installer refuses installation/updates while SIP is enabled. Restore SIP when you finish testing or remove this build; page 9 explains how.
+Use the removal/restoration steps at the end when finished. Continued operation after reenabling SIP has not been qualified for this ad-hoc build. This guide does not require disabling FileVault, authenticated-root protection or Gatekeeper globally, or enabling kernel extensions.
 
 ## Install and enable
 
-### Install the package
+1. Obtain **Shuttle-Capture-0.1.39.pkg** from a trusted project release. The GitHub source-code ZIP is not the installer. Compare its SHA-256 with the release checksums.
+2. Disable editor external output. Stop capture/playback and quit Shuttle Camera, the editors and camera apps.
+3. Open the package, check that its heading says **0.1.39**, and install on the current startup volume. Enter your administrator password in macOS when requested.
+4. If macOS blocks an unsigned package, verify its source first. If you choose to proceed, use the specific package exception under Privacy & Security where offered; do not globally disable Gatekeeper. [Apple: opening apps safely](https://support.apple.com/en-gb/102445).
 
-1. Disable external output in Premiere/Final Cut and quit those editors. Stop output and quit Shuttle Camera. Close QuickTime recording windows and other camera previews.
-2. Open **Shuttle-Capture-0.1.31.pkg**. Install on the current macOS startup volume and enter your administrator password when macOS asks.
-3. If Gatekeeper blocks the package, first verify that it came from a source you trust. Where macOS offers it, use **System Settings → Privacy & Security → Open Anyway** for this specific package. Do not turn off Gatekeeper globally. [Apple: opening apps safely](https://support.apple.com/en-gb/102445).
-4. Let installation finish. Open **Shuttle Camera** from Applications. The installer preserves existing settings and backs up older Shuttle bundles.
+### First installation: enable the drivers
 
-### Verify a downloaded copy
+1. Open Shuttle Camera from Applications. Choose **Help > Driver Setup > Enable Camera**. For editor output, choose **Enable HDMI Output**.
+2. Approve **Shuttle Camera Extension** and **Shuttle HDMI Output Extension** under System Settings > General > Login Items & Extensions > Camera Extensions.
+3. Reopen Shuttle Camera and camera/editor clients after activation. Restart only if macOS requests it or the installed audio driver has not loaded.
 
-In Terminal, type the following and drag the downloaded package into the window after the final space, then press Return:
+An existing camera 17/output 12 installation does not need reactivation for this update. The installer backs up replaced bundles. An unchanged audio driver avoids a Core Audio restart; a first-time audio installation may briefly interrupt sound.
 
-```sh
-shasum -a 256 
-```
-
-Compare the result with the SHA256SUMS.txt supplied with this exact release:
+### Check the package
 
 ```sh
-shasum -a 256 /path/to/Shuttle-Capture-0.1.31.pkg
+shasum -a 256 /path/to/Shuttle-Capture-0.1.39.pkg
 ```
 
-Compare all 64 checksum characters. A matching hash detects a different file; it does not replace trusting the publisher or Apple notarization.
-
-### First installation: enable both camera extensions
-
-1. In Shuttle Camera, choose **Help → Driver Setup → Enable Camera**.
-2. Choose **Help → Driver Setup → Enable HDMI Output** if you want editor HDMI output.
-3. If macOS asks for approval, open **System Settings → General → Login Items & Extensions → Camera Extensions**. Enable **Shuttle Camera Extension** and **Shuttle HDMI Output Extension**.
-4. Quit and reopen Shuttle Camera after activation. Restart if macOS says a restart is required. Approve camera/microphone access for the recording app when requested.
-
-An existing installation with both extensions already enabled does not need reactivation for the 0.1.31 interface update. First-time installation may refresh Core Audio and briefly interrupt sound; restart if the audio devices are missing.
+Compare the whole result with the matching release SHA256SUMS.txt. A checksum verifies file identity, not publisher trust or notarization.
 
 ## Capture VHS
 
-![Capture panel. This example uses PAL composite video and 768 × 576 square-pixel output; select S-Video when using that cable.](images/capture.png)
+![Capture controls with example PAL/S-Video settings. Match the cable and tape standard.](images/capture.png)
 
-1. Connect VCR video OUT to the matching Shuttle input. Connect red/white audio OUT to the Shuttle’s analog RCA inputs. Connect the Shuttle to USB 3 and press Play on the VCR.
-2. Choose **PAL** or **NTSC**, the correct **Video input**, and **Analog RCA**. Choose a resolution and video-loss behavior, then click **Apply**. Close capture previews before changing settings.
-3. In QuickTime Player, choose **File → New Movie Recording**. Select the Intensity Shuttle camera and **Intensity Shuttle — Stereo Audio** as the microphone. Check both picture and audio meter before recording.
+1. Connect VCR video OUT to the matching Shuttle input and red/white audio OUT to its RCA inputs. Connect USB 3 and play the tape.
+2. Choose **PAL** or **NTSC**, the video input, **Analog RCA**, resolution and signal-loss behaviour. Close previews and click **Apply**.
+3. In QuickTime choose **File > New Movie Recording**. Select the Shuttle camera and **Intensity Shuttle - Stereo Audio** microphone. Check picture, levels and a short recording before a long transfer.
 
-PAL: native 720 × 576 or square-pixel 768 × 576. NTSC: native 720 × 480 or square-pixel 640 × 480. Both also offer 1280 × 960 and 1440 × 1080 (4:3). Larger sizes are scaled, with no extra tape detail. PAL 50 fps / NTSC 59.94 fps capture uses bob deinterlacing of the source fields.
+PAL sizes: native 720x576, square 768x576, 1280x960 or 1440x1080. NTSC: native 720x480, square 640x480, 1280x960 or 1440x1080. Larger 4:3 sizes are scaled and add no tape detail. Bob deinterlacing gives 50 fps PAL / approximately 59.94 fps NTSC.
 
-**On video loss:** Hold last frame repeats the last picture; Black substitutes black. Dropout handling preserves the timing rather than shortening the recording, but it cannot recover a damaged tape signal. Check a short recorded clip for sound and sync before a long transfer.
+Hold last frame or Black preserves capture timing during signal loss; it cannot repair an unstable tape signal. Apply commits format changes. Refresh reloads the active camera settings.
 
-## Play a movie over HDMI
+## Live picture controls
 
-![Movie file controls with illustrative settings. Example movie.mov is a placeholder; no movie was opened or played to make this screenshot.](images/movie.png)
+![Picture controls update the camera feed while a preview is open.](images/picture.png)
 
-1. Connect the display directly to the Shuttle’s **HDMI OUT**. Close all Shuttle camera previews.
-2. Choose **Video Output → Source → Movie file**, then **Choose movie…**. Select the HDMI format.
-3. Enable **Loop** to repeat the movie. Click **Start output**; use **Stop** when finished. Movie audio travels through the Shuttle; Use HDMI audio is not needed for the movie file’s own sound.
+1. Start the VCR and open the capture preview. In **Picture**, leave **Live adjustments** enabled.
+2. Adjust **Brightness**, **Contrast**, **Colour** (saturation) and **Sharpness**. Watch the preview while moving a slider.
+3. Use **Reset picture** for neutral processing. Check your recording before committing a long transfer.
 
-| HDMI format | Picture format / cadence |
+These are software input-picture adjustments, applied to the camera feed rather than the tape. They do not control HDMI playback colour format. Changing video standard/input/resolution still needs Apply with previews closed.
+
+If controls are unavailable, use Capture > Refresh. An older active camera extension may require activation with previews closed. Do not keep clicking Enable when the current driver is already ready.
+
+## Movie playback and formats
+
+![Choose a movie, select Fit/Fill/Stretch and optionally loop it. The filename is illustrative.](images/movie.png)
+
+1. Close camera previews. Select **Movie file**, click **Choose movie** and select an output connector and format.
+2. Select sizing, enable **Loop** if desired and click **Start output**. Use Stop when finished. The movie supplies its own sound; Use Shuttle Audio is not required for it.
+
+| Output format | Wire raster / cadence |
 | --- | --- |
-| PAL · 576i50 | 720 × 576; 50 fields/s |
-| NTSC · 480i59.94 | 720 × 486 output raster; 59.94 fields/s |
-| 1080i50 / 1080i59.94 | 1920 × 1080; 50 / 59.94 fields/s |
-| 1080p25 / 1080p29.97 | 1920 × 1080; 25 / 29.97 frames/s |
+| PAL 576i50 | 720x576 / 50 fields per second |
+| NTSC 480i59.94 | 720x486 / approximately 59.94 fields per second |
+| 1080i50 /1080i59.94 | 1920x1080 / 50 or approximately 59.94 fields per second |
+| 1080p25 /1080p29.97 | 1920x1080 / 25 or approximately 29.97 frames per second |
 
-A TV may round 59.94 to “60” and 29.97 to “30”. Use Test pattern for a short display/cable test. Capture resolution and HDMI output format are separate settings. Capture cannot run at the same time as USB playback.
+S-Video and composite use PAL/NTSC. HDMI/component keep supported SD/HD formats. Compatible connectors may remain active together; the selection constrains formats, not an exclusive switch. Separate HD-plus-downconverted-SD output is not implemented.
 
-## Final Cut Pro and Premiere Pro
+## Final Cut Pro output
 
-### Final Cut Pro — tested with 11.2
+![Final Cut output settings and monitoring controls; example values are shown.](images/output.png)
 
-1. Close Shuttle capture previews. In Shuttle Camera → Video Output choose **Final Cut Pro** and a format matching the timeline, for example **1080p25** for 25 fps.
-2. Click **Use HDMI audio**, then **Start Final Cut**. Wait for **Ready for Final Cut**. Keep Shuttle Camera open.
-3. In Final Cut, choose **Settings → Playback → A/V Output → Intensity Shuttle — HDMI Output**. Enable **Window → A/V Output**, then scrub and play.
-4. When finished, turn **Window → A/V Output** off first; then click Stop in Shuttle Camera. Restore audio if needed. Turning A/V Output off alone does not restore the Mac’s normal sound route.
+1. Choose **Final Cut Pro** and a format appropriate to the timeline. Click **Use Shuttle Audio** if sound should follow the device.
+2. Click **Start Final Cut** and wait for **Ready for Final Cut**. Keep Shuttle Camera open.
+3. In Final Cut Pro 11, choose **Settings > Playback > A/V Output > Intensity Shuttle - HDMI Output**. Enable **Window > A/V Output** and play or scrub.
+4. When finished, disable Final Cut A/V Output first, then Stop in Shuttle Camera. Turning A/V Output off alone does not restore the Mac sound route.
 
-### Premiere Pro — tested with 25.2.3 (2025)
+The Shuttle output is SD/HD, not 4K. Rendering/downscaling of a 4K timeline takes place in the editor. Compare the same section with A/V Output off if playback becomes choppy, and check timeline/output cadence before changing driver settings.
 
-1. In Shuttle Camera → Video Output choose **Premiere Pro** and the matching HDMI format. Click **Start Premiere** and wait for **Ready for Premiere**.
-2. In Premiere, choose **Settings/Preferences → Playback**. Enable **Mercury Transmit** and tick the video stream for **Intensity Shuttle — HDMI Output**. This is separate from the original Blackmagic Playback entry.
-3. For sound, choose **Intensity Shuttle — HDMI Audio** in Premiere’s **Audio Hardware → Default Output**. The Mercury Transmit plug-in is video-only; its empty Transmit audio-stream column is expected.
-4. Play or scrub the sequence. Leave Shuttle Camera running. If output disappears when Premiere is in the background, check Premiere’s Disable video output when in the background setting.
-5. Disable Mercury Transmit before stopping output. If you explicitly selected the HDMI audio device in Premiere, select your normal output in Premiere Audio Hardware afterwards.
+## Premiere Pro output
 
-### If the output device is missing
+![Premiere source selection. Video and audio are selected separately in Premiere.](images/premiere.png)
 
-Restart Premiere after installing its plug-in. Final Cut publishes the device after the matching USB sender is ready. Start with matching timeline/output rates; conversion between arbitrary frame rates has not been qualified. The current installer places Premiere’s transmitter in the legacy **Plug-ins** folder used by the tested Premiere 2025 installation, not the differently named Plugins folder.
+1. Choose **Premiere Pro** and the matching format. Click **Start Premiere** and wait for **Ready for Premiere**.
+2. In Premiere Pro 2025 Playback settings enable **Mercury Transmit** and the video stream for **Intensity Shuttle - HDMI Output**.
+3. In **Audio Hardware > Default Output** select **Intensity Shuttle - HDMI Audio**. The Transmit plug-in is video-only; an empty audio-stream column is expected.
+4. Disable Mercury Transmit before stopping output. Restore any explicit Premiere audio-device selection inside Premiere itself.
 
-Close one editor’s external output before using another. The same physical Shuttle cannot serve two simultaneous playback sessions.
+Restart Premiere after plug-in installation. Its original Blackmagic Playback entry is separate from this project. If output disappears in the background, check Premiere's Disable video output when in the background option. Close one editor's external output before using another.
+
+## Mirror or extend the desktop
+
+![Extended display with Stretch selected. Start creates a separate Mac desktop.](images/extended.png)
+
+1. Choose **Mac desktop** to mirror an existing screen, or **Extended display** for a separate desktop. Select connector, video format and sizing.
+2. Grant **Screen & System Audio Recording** permission to Shuttle Camera in Privacy & Security when requested; reopen the app afterwards.
+3. Start output. For Extended display, arrange **Shuttle Extended Display** in macOS Displays, then drag windows onto it. Use Shuttle Audio if Mac media sound should follow it.
+4. Stop removes the virtual display and restores the saved audio route.
+
+PAL/NTSC start with a 1024x768 desktop scaled to SD; HD starts with 1920x1080. macOS may offer other desktop sizes. The virtual desktop uses 60 Hz and is sampled into the selected video cadence. It is not a direct GPU monitor connection.
+
+Extended display uses an undocumented macOS interface and may change after an OS update. Protected media may not be capturable. ScreenCaptureKit captures video here; audio uses the separate Core Audio route.
+
+## Fit, Fill and Stretch
+
+| Sizing | Result |
+| --- | --- |
+| Fit | Keeps the whole image and its proportions; adds borders when needed. |
+| Fill | Fills without distortion by cropping the edges. |
+| Stretch | Maps the whole image into the whole output frame; proportions can change. |
+
+### Change desktop resolutions while output runs
+
+1. Stop output and choose **Stretch** in Video Output, then start it.
+2. Select the virtual/mirrored screen in macOS Displays and choose a desktop resolution. The whole current screen now fills the fixed video frame without restarting the sender.
+3. For Fit/Fill, restart output after changing desktop resolution so their preserved-aspect geometry is recalculated.
+
+Live software tests covered all eleven requested desktop sizes into HD, PAL and NTSC output surfaces: 1920x1080, 1600x1200, 1600x900, 1344x1008, 1344x756, 1280x960, 1280x720, 1024x768, 1024x576, 960x540 and 800x600. Available choices depend on the screen.
+
+A 4:3 desktop stretched to 16:9 becomes wider. This is intentional Stretch behaviour. Desktop resolution, capture resolution and physical video timing are three different settings. Choosing a larger desktop does not add 4K or 1080p50/60 Shuttle wire output.
+
+### Media and idle pictures
+
+The same sizing choices are available for movie playback and idle pictures/movies. Restart output after changing idle sizing or media. The software accounts for PAL/NTSC pixel proportions when calculating Fit/Fill.
+
+## Choose an idle screen
+
+![Example idle picture using the original project icon, with a two-minute delay.](images/idle.png)
+
+1. In **Idle Screen**, choose Hold last frame, Black, Colour bars, Picture or Movie loop (silent).
+2. Use **Choose media** for a picture/movie. Choose Fit/Fill/Stretch and a **Show after** delay.
+3. Restart output to apply the saved choice. Keep output running; playback or scrubbing restores new editor video immediately.
+
+The default is two minutes without newly received editor frames. Delay choices are Immediately, 30 seconds, 1/2/5/10 minutes or Never. This replaces idle editor output, not a camera input-loss picture.
+
+An idle movie loops silently. Keep the original movie file available at its saved location; an imported still is copied to Application Support. Missing/unreadable media falls back to black with a diagnostic.
 
 ## Sound, sync and overlays
 
-### Choose the right audio device
-
 | Task | Audio selection |
 | --- | --- |
-| VHS recording | Intensity Shuttle — Stereo Audio as the recording app’s microphone |
-| Final Cut HDMI monitoring | Use HDMI audio in Shuttle Camera before starting editor output |
-| Premiere HDMI monitoring | Intensity Shuttle — HDMI Audio in Premiere Audio Hardware |
-| Movie file output | Sound comes from the selected movie file |
+| Capture recording | Intensity Shuttle - Stereo Audio microphone |
+| Final Cut / Mac media | Use Shuttle Audio in Shuttle Camera |
+| Premiere monitoring | Intensity Shuttle - HDMI Audio in Audio Hardware |
+| Movie playback | Sound from the selected movie file |
 
-**Use HDMI audio** changes the Mac’s default media output and saves its previous choice. Stop, helper exit or app quit restores that choice only if the route is still Shuttle HDMI. A later manual change is respected. This does not restore an explicit per-application output selected inside Premiere; change that in Premiere itself.
+**Use Shuttle Audio** changes the Mac media output and saves its previous selection. Stop, helper exit or app quit restores it while the route is still the Shuttle; a later manual change is respected. Compatible device outputs can carry sound, though the Core Audio device keeps its existing HDMI Audio name. An explicit Premiere selection must be restored in Premiere.
 
-### Adjust audio sync
+### Timeline audio sync
 
-Use **Audio sync** in Video Output while timeline monitoring. Negative values move sound earlier; positive values delay it. Range: −100 to +500 ms. If sound is slightly late, try −20 ms, press Return, and compare again. Wait about a second between adjustments. The stepper changes by 10 ms; Reset returns to zero. A live adjustment can briefly click or skip. This setting is for timeline HDMI sound, not capture recording.
+Negative values move sound earlier; positive values delay it. Range: -100 to +500 ms, with 10 ms stepper increments. Press Return after typing a value and compare after about a second. Reset returns to zero. This is for timeline output, not capture recording; adjustments can briefly click or skip.
 
-### HDMI overlays
+### Output monitoring aids
 
-- **Timecode:** TC HH:MM:SS:FF from the editor, with a DF marker for drop-frame. Dashes mean valid timecode was not supplied. It is not an invented elapsed counter.
-- **L/R audio meters:** independent stereo levels with peak hold and clip indication. The meters show sound sent to HDMI.
-- **Positions:** top left, top right, bottom left, bottom right, top centre or bottom centre. Timecode and meters have separate positions.
-- **Title safe (80%) / Action safe (90%):** optional white/yellow guides. These are the app’s guide percentages, not a guarantee of compliance with a broadcaster’s delivery specification.
+- **Timecode:** TC HH:MM:SS:FF, or a semicolon for drop-frame. Dashes mean the editor supplied no valid timecode.
+- **L/R meters:** outgoing stereo levels, peak hold and clip indication.
+- **Positions:** six choices each for timecode and meters, with independent placement. The timecode background is translucent.
+- **Title safe 80% / Action safe 90%:** optional white/yellow guides. These are app guide percentages, not a broadcaster-compliance guarantee.
 
-Overlays affect the outgoing HDMI picture only; they do not burn into the source file or editor project. Settings are saved and update live. Timecode is available for editor output; meters and safe guides also work with movie playback.
+Overlays affect the outgoing picture on compatible outputs, not the editor project/source file. Output timecode is for editors; meters/guides also work with movie playback. About and Quit are in the app menu; Help contains setup, diagnostics and driver actions.
 
-### Menus
+## Troubleshooting
 
-**Shuttle Camera → About** shows the version; **Quit (⌘Q)** closes the app. **Help → Output Setup** gives source-specific instructions. **Help → Diagnostics** opens the technical log. **Help → Driver Setup** contains the extension enable/disable actions.
-
-## Troubleshooting and limits
-
-| Problem | What to check |
+| Symptom | Check |
 | --- | --- |
-| Installer fails | Quit both editors and Shuttle Camera, close capture previews, check SIP status, and use the current startup volume. Installer → Window → Installer Log shows the precise reason. |
-| Camera missing | Use Help → Driver Setup → Enable Camera. Approve Camera Extensions in System Settings, then reopen Shuttle Camera and the recording app. |
-| No capture sound | Use the separate Stereo Audio microphone, Analog RCA for VCR red/white cables, and check app microphone permission. |
-| Ready never appears | Close capture previews, check USB 3 cable/adapter and power, reconnect the Shuttle after stopping clients, then retry. Read Help → Diagnostics. |
-| Premiere device missing | Restart Premiere; confirm the Shuttle transmitter exists in the Plug-ins path on page 9. Do not select Blackmagic Playback as a substitute for this plug-in. |
-| Picture, no HDMI sound | Check Premiere Audio Hardware or Final Cut’s Use HDMI audio route. TV speakers must be enabled; HDMI-to-DVI connections do not provide TV audio. |
-| Purple blacks / wrong colours | On the tested Dell P2213t with HDMI-to-DVI, set its Input Color Format to YPbPr. RGB selection in this app is not implemented. Direct HDMI to the tested TV worked. |
-| Mac sound missing afterwards | Click Restore audio or choose normal speakers in Sound settings. Also undo any explicit HDMI output selection inside Premiere. |
-| Editor freezes / viewer stops | Disable external output, then stop Shuttle output. Relaunch only after saving work. Report the format, editor version and Diagnostics log; do not keep toggling output during a hung session. |
+| Installer error | Quit editors/camera apps and stop output. Confirm the installer heading/version; use the startup volume. Installer Log gives the actual failure. |
+| Camera missing | Enable Camera in Help > Driver Setup and approve Camera Extensions; reopen the recording app. |
+| No capture audio | Choose the separate Stereo Audio microphone, Analog RCA input and microphone permission. |
+| Screen permission loops | Quit Shuttle Camera. Remove its old Screen & System Audio Recording entry, add /Applications/Shuttle Camera.app again, enable and reopen. Ad-hoc updates can leave an old permission signature. |
+| SD screen absent in Displays | Select Extended display and Start. Use current software; PAL/NTSC now start at 1024x768. Test pattern does not create a desktop. |
+| Only part of a desktop shows | Stop, select Stretch, start again. Stretch follows live desktop size changes; restart Fit/Fill after a mode change. |
+| Editor output choppy | Match timeline/output cadence; compare A/V Output off/on. Check rendering/media load and collect diagnostics during the affected session. |
+| Purple blacks on DVI monitor | The tested Dell P2213t needs YPbPr for HDMI-to-DVI. Selectable RGB output is not implemented. |
+| Mac sound missing afterwards | Restore audio in Shuttle Camera or Sound settings; restore explicit Premiere output inside Premiere. |
+| Premiere device absent | Restart Premiere and confirm the Transmit bundle is in the legacy Plug-ins path listed on the next page. |
 
-### Current limitations
-
-This build is Apple silicon only. Capture is standard-definition; S-Video/composite VHS capture is the main tested workflow. Listed Component/HDMI capture options do not imply HD capture support. There is no DaVinci Resolve output integration, selectable RGB HDMI mode, simultaneous capture/playback or qualified 1080p50/60 output.
-
-Testing covered the listed PAL/NTSC/1080 modes on one Mac Studio setup. It is not proof of compatibility with every USB controller, display, movie codec, editor update or tape. Very long sessions, exact measured physical A/V latency and fresh installs on other Macs have not been comprehensively qualified.
-
-For a useful report, include the app/macOS/editor versions, source and HDMI format, connection type, whether the camera is in use, and relevant Diagnostics/Installer Log lines. Review logs for private file names before sharing them.
+For a report, include app/macOS/editor versions, project/source frame rate, output format, connection and relevant diagnostics. Review logs for personal filenames. Every codec, 4K timeline, analogue combination and long-session latency has not been comprehensively qualified. There is no Resolve output integration or simultaneous capture/playback.
 
 ## Remove it and restore security
 
-### Remove the development components
+1. Save work. Disable editor external output, stop playback/capture, restore sound and quit clients.
+2. Use Help > Driver Setup > Disable Camera. Turn off both Shuttle Camera Extensions in System Settings.
+3. Move Shuttle Camera.app from Applications to the Bin. Allow macOS to remove bundled extensions if prompted. Do not manually delete /Library/SystemExtensions.
+4. In Finder, move only this project's audio driver and Premiere bundle at the paths below to the Bin. Administrator approval may be required. Restart to unload audio and finish pending removal.
 
-1. Save your work. Disable editor external output, quit the editors, stop Shuttle output and restore normal audio. Close recording/camera previews.
-2. In Shuttle Camera, use **Help → Driver Setup → Disable Camera**. In System Settings → Camera Extensions, turn off both Shuttle extensions.
-3. Move **Shuttle Camera.app** from Applications to the Bin using Finder. Allow macOS to remove its bundled extensions if prompted. Do not manually delete files from /Library/SystemExtensions.
-4. In Finder → Go → Go to Folder, visit the HAL path below and move only **Shuttle Audio.driver** to the Bin. Visit the Premiere path and move only **Shuttle Transmit.bundle** to the Bin. Administrator approval may be required.
-5. Restart to unload audio and finish any pending extension removal. Check that other audio devices work normally. Do not use systemextensionsctl reset; it would affect unrelated extensions.
+### Installed components
 
-### Turn extension developer mode off in normal macOS
+- App: `/Applications/Shuttle Camera.app`
+- Audio: `/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver`
+- Premiere: `/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle`
+- Source, status and backups: `/Library/Application Support/Shuttle Camera`. User settings/media are under the user's Library/Application Support/Shuttle Camera.
+
+### Restore the development security settings
+
+If developer mode was enabled, turn it off in normal Terminal:
 
 ```sh
 sudo systemextensionsctl developer off
 ```
 
-### Turn SIP back on in Recovery
-
-Boot to Recovery as on page 2, choose Utilities → Terminal, run the command below, then restart normally. Verify with csrutil status in the desktop Terminal. If you separately changed Startup Security policies, consult Apple’s Recovery guidance to restore the appropriate policy for your startup system. [Apple: disabling and enabling SIP](https://developer.apple.com/documentation/security/disabling-and-enabling-system-integrity-protection).
+In Recovery Terminal, reenable SIP and restart. Verify with csrutil status in normal macOS. [Apple: disabling and enabling SIP](https://developer.apple.com/documentation/security/disabling-and-enabling-system-integrity-protection).
 
 ```sh
 csrutil enable
 ```
 
-The ad-hoc development extensions may stop working after restoring SIP; do not treat this as a supported way to keep using this build. Retain backups until you have checked your files and normal audio. Accessing installer backups may require administrator rights.
-
-### Installed files and source
-
-- App: `/Applications/Shuttle Camera.app`
-- Audio: `/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver`
-- Premiere: `/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle`
-- Source archive, licences, installation status and backups: `/Library/Application Support/Shuttle Camera/`
-
-Project source includes GPL/LGPL components; consult COPYING and component licences in Source.zip. Adobe’s SDK must be obtained separately for rebuilding the Premiere adapter. The new original SVHS project artwork was generated from a text-only prompt without the previous icon as an input; it is included under the project GPL-2.0-or-later terms. See ICON-NOTE.md in the source resources.
+The ad-hoc extensions may stop working with SIP restored; this runtime configuration is not qualified. Do not reset all system extensions, because that affects unrelated software. Keep backups until normal audio and files are checked.

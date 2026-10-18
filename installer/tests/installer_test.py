@@ -47,7 +47,7 @@ class InstallerTests(unittest.TestCase):
   (path/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':identifier,'CFBundleVersion':str(version)}))
   (path/'Contents/MacOS/program').write_text(body)
  def payload(self):
-  self.bundle(self.app,'local.shuttle.camera',31,'new camera');self.bundle(self.audio,'local.shuttle.audio',3,'new audio');self.bundle(self.premiere,'local.shuttle.premiere.transmit',1,'new plugin')
+  self.bundle(self.app,'local.shuttle.camera',39,'new camera');self.bundle(self.audio,'local.shuttle.audio',3,'new audio');self.bundle(self.premiere,'local.shuttle.premiere.transmit',1,'new plugin')
  def run_script(self,name,*args):
   return subprocess.run(['/bin/bash',str(self.scripts/name),*args],env=self.env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
  def pre(self):return self.run_script('preinstall','package.pkg','/','/')
@@ -83,20 +83,21 @@ class InstallerTests(unittest.TestCase):
  def test_sip_enabled_rejected_without_changes(self):
   (self.root/'sip-enabled').touch();r=self.pre();self.assertNotEqual(r.returncode,0);self.assertIn('does not change SIP',r.stdout);self.assertFalse(self.support.exists())
  def test_newer_bundle_and_unrelated_bundle_rejected(self):
-  for ident,version in [('local.shuttle.camera',32),('other.application',16)]:
+  for ident,version in [('local.shuttle.camera',40),('other.application',16)]:
    self.bundle(self.app,ident,version,'preserved');self.assertNotEqual(self.pre().returncode,0);self.assertEqual((self.app/'Contents/MacOS/program').read_text(),'preserved');self.assertFalse(self.support.exists())
  def test_newer_audio_rejected_without_writes(self):
   self.bundle(self.audio,'local.shuttle.audio',4,'future audio');r=self.pre();self.assertNotEqual(r.returncode,0,r.stdout);self.assertEqual((self.audio/'Contents/MacOS/program').read_text(),'future audio');self.assertFalse(self.support.exists());self.assertEqual(self.restarts(),[])
  def test_builder_requires_exact_nested_payload_versions(self):
-  self.payload();extensions=self.app/'Contents/Library/SystemExtensions'
+  self.payload();(self.app/'Contents/MacOS/ShuttleDisplay').write_text('mock display helper');extensions=self.app/'Contents/Library/SystemExtensions'
   camera=extensions/'local.shuttle.camera.extension.systemextension';output=extensions/'local.shuttle.output.extension.systemextension'
-  self.bundle(camera,'local.shuttle.camera.extension',15,'camera');self.bundle(output,'local.shuttle.output.extension',12,'output')
+  self.bundle(camera,'local.shuttle.camera.extension',17,'camera');self.bundle(output,'local.shuttle.output.extension',12,'output')
   build=(SOURCE/'build.sh').read_text();guard=re.search(r'python3 - "\$app" "\$audio" <<\x27PY\x27\n(.*?)\nPY',build,re.S).group(1)
   def check():return subprocess.run([sys.executable,'-',str(self.app),str(self.audio)],input=guard,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
   r=check();self.assertEqual(r.returncode,0,r.stdout)
-  for path,identifier,version,correct in [(self.app,'local.shuttle.camera',30,31),(output,'local.shuttle.output.extension',11,12),(camera,'local.shuttle.camera.extension',16,15),(self.audio,'local.shuttle.audio',2,3)]:
+  for path,identifier,version,correct in [(self.app,'local.shuttle.camera',38,39),(output,'local.shuttle.output.extension',11,12),(camera,'local.shuttle.camera.extension',16,17),(self.audio,'local.shuttle.audio',2,3)]:
    with self.subTest(bundle=identifier,version=version):
     self.bundle(path,identifier,version,'wrong version');self.assertNotEqual(check().returncode,0);self.bundle(path,identifier,correct,'correct version')
+  (self.app/'Contents/MacOS/ShuttleDisplay').unlink();self.assertNotEqual(check().returncode,0)
  def test_symlink_rejected(self):
   self.app.parent.mkdir(parents=True);self.app.symlink_to(self.root,target_is_directory=True);self.assertNotEqual(self.pre().returncode,0);self.assertFalse(self.support.exists())
  def test_capture_started_during_install_skips_coreaudio_restart(self):

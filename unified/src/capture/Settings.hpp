@@ -3,7 +3,7 @@
 #import <Foundation/Foundation.h>
 #include "VideoProfile.hpp"
 static NSString * const SettingsProperty=@"4cc_conf_glob_0";
-static NSDictionary *defaultSettings() { return @{ @"standard":@"PAL",@"video_input":@"S-Video",@"audio_input":@"Analog RCA",@"dropout":@"Hold last frame",@"output_size":@"Native" }; }
+static NSDictionary *defaultSettings() { return @{ @"standard":@"PAL",@"video_input":@"S-Video",@"audio_input":@"Analog RCA",@"dropout":@"Hold last frame",@"output_size":@"Native",@"brightness":@0,@"contrast":@100,@"colour":@100,@"sharpness":@0 }; }
 static bool parseSettings(NSDictionary *d,shuttle::CaptureSettings &s) {
     if(![d isKindOfClass:NSDictionary.class]) return false;
     for(NSString *key in @[@"standard",@"video_input",@"audio_input",@"dropout"])
@@ -15,6 +15,16 @@ static bool parseSettings(NSDictionary *d,shuttle::CaptureSettings &s) {
     NSString *output=d[@"output_size"]?:@"Native";
     NSArray *sizes=@[@"Native",@"Square pixels",@"1280x960",@"1440x1080"];
     if(![output isKindOfClass:NSString.class] || ![sizes containsObject:output]) return false;
+    for(NSString *key in @[@"brightness",@"contrast",@"colour",@"sharpness"]) {
+        id value=d[key];if(!value)continue;
+        double v=[value isKindOfClass:NSNumber.class]?[value doubleValue]:NAN;
+        int low=[key isEqual:@"brightness"]?-100:0,high=[key isEqual:@"brightness"]||[key isEqual:@"sharpness"]?100:200;
+        if(!std::isfinite(v)||v<low||v>high||v!=std::round(v))return false;
+    }
+    s.picture.brightness=d[@"brightness"]?[d[@"brightness"] intValue]:0;
+    s.picture.contrast=d[@"contrast"]?[d[@"contrast"] intValue]:100;
+    s.picture.colour=d[@"colour"]?[d[@"colour"] intValue]:100;
+    s.picture.sharpness=d[@"sharpness"]?[d[@"sharpness"] intValue]:0;
     s.outputSize=static_cast<shuttle::OutputSize>([sizes indexOfObject:output]);
     s.profile.ntsc=[standard isEqual:@"NTSC"];s.videoInput=[videos[video] unsignedIntValue];
     s.audioInput=[audio isEqual:@"Analog RCA"]?0x10000000:0;s.blackOnDropout=[drop isEqual:@"Black"];return true;

@@ -29,8 +29,14 @@ static OSStatus TestAudioSettable(AudioObjectID,const AudioObjectPropertyAddress
 static OSStatus TestAudioSet(AudioObjectID,const AudioObjectPropertyAddress*,UInt32,const void*,UInt32,const void*) {++audioWrites;assert(false&&"No route actions allowed");return -1;}
 static OSStatus TestAudioAdd(AudioObjectID,const AudioObjectPropertyAddress*,dispatch_queue_t,AudioObjectPropertyListenerBlock block) {testListener=[block copy];return 0;}
 static OSStatus TestAudioRemove(AudioObjectID,const AudioObjectPropertyAddress*,dispatch_queue_t,AudioObjectPropertyListenerBlock) {testListener=nil;return 0;}
-static OSStatus TestCMIOSize(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32,const void*,UInt32* bytes) {*bytes=0;return 0;}
-static OSStatus TestCMIOGet(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32,const void*,UInt32,UInt32* bytes,void*) {*bytes=0;return 0;}
+static CFStringRef testCameraJSON=nullptr;
+static OSStatus TestCMIOSize(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32,const void*,UInt32* bytes) {*bytes=testCameraJSON?sizeof(CMIOObjectID):0;return 0;}
+static OSStatus TestCMIOGet(CMIOObjectID,const CMIOObjectPropertyAddress* a,UInt32,const void*,UInt32,UInt32* bytes,void* value) {
+    if(!testCameraJSON){*bytes=0;return 0;}
+    if(a->mSelector==kCMIOHardwarePropertyDevices){*(CMIOObjectID*)value=123;*bytes=sizeof(CMIOObjectID);return 0;}
+    CFStringRef text=a->mSelector==kCMIODevicePropertyDeviceUID?CFSTR("local.shuttle.camera.pal"):testCameraJSON;
+    *(CFStringRef*)value=(CFStringRef)CFRetain(text);*bytes=sizeof(CFStringRef);return 0;
+}
 static OSStatus TestCMIOSet(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32,const void*,UInt32,const void*) {++cmioWrites;assert(false&&"No CMIO actions allowed");return -1;}
 
 @interface UITestDefaults:NSObject
@@ -42,6 +48,7 @@ static OSStatus TestCMIOSet(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32
 - (NSInteger)integerForKey:(NSString*)key{return [self.values[key] integerValue];}
 - (BOOL)boolForKey:(NSString*)key{return [self.values[key] boolValue];}
 - (NSString*)stringForKey:(NSString*)key{return self.values[key];}
+- (id)objectForKey:(NSString*)key{return self.values[key];}
 - (void)setInteger:(NSInteger)value forKey:(NSString*)key{self.values[key]=@(value);}
 - (void)setBool:(BOOL)value forKey:(NSString*)key{self.values[key]=@(value);}
 - (void)setObject:(id)value forKey:(NSString*)key{self.values[key]=value;}
@@ -128,14 +135,14 @@ static void CheckOutput(CombinedHost* host,NSString* phase) {
     CheckControl(root,output.start,output,@selector(startOutput:),@"Start output");
     CheckControl(root,output.stop,output,@selector(stopOutput:),@"Stop output");
     if(output.source.indexOfSelectedItem==1)CheckControl(root,output.loop,nil,nullptr,@"Loop movie");
-    CheckControl(root,output.useHDMIAudio,output,@selector(useHDMIAudio:),@"Use HDMI audio");
+    CheckControl(root,output.useHDMIAudio,output,@selector(useHDMIAudio:),@"Use Shuttle Audio");
     CheckControl(root,output.restoreAudio,output,@selector(restoreAudio:),@"Restore audio");
     CheckControl(root,FindButton(root,@"Sound settings…"),output,@selector(openAudioSettings:),@"Sound settings");
     Check(![output.log isDescendantOf:root],@"diagnostic log is not on the main window");
     auto* applicationMenu=[NSApp.mainMenu itemAtIndex:0].submenu;
     Check([applicationMenu itemWithTitle:@"About Shuttle Camera"].action==@selector(showAbout:),@"About app menu action available");
     auto* quit=[applicationMenu itemWithTitle:@"Quit Shuttle Camera"];Check(quit.action==@selector(terminate:)&&[quit.keyEquivalent isEqual:@"q"]&&quit.target==NSApp,@"Quit uses normal application cleanup and Command-Q");
-    Check(output.start.enabled&&output.useHDMIAudio.enabled,@"Start and Use HDMI audio are enabled while idle");
+    Check(output.start.enabled&&output.useHDMIAudio.enabled,@"Start and Use Shuttle Audio are enabled while idle");
     Check(!output.stop.enabled&&!output.restoreAudio.enabled,@"Stop/Restore are correctly disabled before any action");
     Check(output.task==nil,@"no task was constructed or launched");
 }
@@ -153,6 +160,32 @@ extern "C" int CombinedUITestMain(int argc,char** argv){@autoreleasepool {
         weakOutput=host.output;weakStart=host.output.start;
         CheckControl(host.window.contentView,host.outputButton,host,@selector(showOutput:),@"Video Output tab");
         CheckControl(host.window.contentView,host.captureButton,host,@selector(showCapture:),@"Capture tab");
+        testCameraJSON=CFSTR("{\"standard\":\"PAL\",\"video_input\":\"S-Video\",\"audio_input\":\"Analog RCA\",\"dropout\":\"Hold last frame\",\"output_size\":\"Native\"}");[host.capture refresh:nil];
+        Check(!host.capture.brightness.enabled&&!host.capture.pictureApply.enabled&&!host.capture.enablePicture.hidden,@"old camera driver disables picture controls and exposes activation button");
+        testCameraJSON=CFSTR("{\"standard\":\"PAL\",\"video_input\":\"S-Video\",\"audio_input\":\"Analog RCA\",\"dropout\":\"Hold last frame\",\"output_size\":\"Native\",\"brightness\":0,\"contrast\":100,\"colour\":100,\"sharpness\":0}");[host.capture refresh:nil];
+        Check(host.capture.brightness.enabled&&host.capture.pictureApply.enabled&&!host.capture.livePicture.enabled&&!host.capture.enablePicture.hidden,@"driver16 allows saved controls but explains that live controls need updating");
+        testCameraJSON=CFSTR("{\"standard\":\"PAL\",\"video_input\":\"S-Video\",\"audio_input\":\"Analog RCA\",\"dropout\":\"Hold last frame\",\"output_size\":\"Native\",\"brightness\":0,\"contrast\":100,\"colour\":100,\"sharpness\":0,\"picture_live\":true}");[host.capture refresh:nil];
+        host.capture.livePicture.enabled=NO;host.capture.enablePicture.hidden=NO;
+        [host.capture.standard selectItemWithTitle:@"NTSC"];[host showPicture:nil];
+        Check(host.capture.livePicture.enabled&&host.capture.enablePicture.hidden&&[host.capture.standard.titleOfSelectedItem isEqual:@"NTSC"],@"Picture tab refreshes stale capability without discarding unapplied input settings");
+        host.capture.enablePicture.hidden=NO;[host.capture activate:host.capture.enablePicture];
+        Check(host.capture.enablePicture.hidden&&[host.capture.status.stringValue containsString:@"already enabled"],@"stale Enable action returns without submitting a driver replacement");
+        [host.capture.standard selectItemWithTitle:@"PAL"];
+        Check(host.capture.livePicture.enabled&&host.capture.pictureApply.enabled&&host.capture.enablePicture.hidden,@"driver17 enables live controls and hides activation button");
+        [host showPicture:nil];
+        CheckControl(host.window.contentView,host.capture.brightness,host.capture,@selector(pictureChanged:),@"Input brightness");
+        CheckControl(host.window.contentView,host.capture.sharpness,host.capture,@selector(pictureChanged:),@"Input sharpness");
+        CFStringRef healthy=testCameraJSON;
+        testCameraJSON=CFSTR("{\"standard\":\"PAL\",\"video_input\":\"S-Video\",\"audio_input\":\"Analog RCA\",\"dropout\":\"Hold last frame\",\"output_size\":\"1440x1080\",\"brightness\":0,\"contrast\":100,\"colour\":100,\"sharpness\":0,\"picture_live\":true}");
+        [host.capture refresh:nil];Check(host.capture.resolution.indexOfSelectedItem==3,@"active 1440 resolution is displayed and cached");
+        testCameraJSON=nullptr;[host.capture refresh:nil];Check(host.capture.resolution.indexOfSelectedItem==3&&host.capture.settingsRetry!=nil,@"temporary device disappearance retains resolution and schedules bounded retry");
+        Check([[[UITestDefaults standardUserDefaults] objectForKey:@"LastKnownCaptureSettings"][@"output_size"] isEqual:@"1440x1080"],@"transient read failure does not overwrite the known saved resolution");
+        testCameraJSON=healthy;[host.capture.resolution selectItemAtIndex:2];[host.capture selectionChanged:host.capture.resolution];[host.capture refresh:nil];Check(host.capture.resolution.indexOfSelectedItem==2,@"automatic retry preserves an unapplied resolution draft");
+        [host.capture refresh:host.capture.resolution];Check(host.capture.resolution.indexOfSelectedItem==0&&host.capture.settingsRetry==nil,@"explicit Refresh loads actual settings and cancels retry");
+        [host showIdle:nil];CheckControl(host.window.contentView,host.idle.screen,host.idle,@selector(screenChanged:),@"HDMI idle policy");
+        Check(host.idle.delay.numberOfItems==7&&host.idle.delay.indexOfSelectedItem==3,@"idle delay defaults to two minutes with seven choices");
+        for(NSInteger choice=0;choice<7;++choice){[host.idle.delay selectItemAtIndex:choice];[host.idle screenChanged:nil];Check([[UITestDefaults standardUserDefaults] integerForKey:@"HDMIIdleDelaySeconds"]==[@[@0,@30,@60,@120,@300,@600,@(-1)][choice] integerValue],@"idle delay choice saves exact seconds independently");}[host.idle.delay selectItemAtIndex:3];[host.idle screenChanged:nil];
+        Check(host.idle.screen.numberOfItems==5,@"Hold, black, bars, picture and silent movie choices");
         // These methods only select a tab; no control actions are dispatched.
         [host showOutput:nil];CheckOutput(host,@"Before autorelease-pool drain");
         [host showCapture:nil];[host showOutput:nil];
@@ -186,6 +219,15 @@ extern "C" int CombinedUITestMain(int argc,char** argv){@autoreleasepool {
     Check([[UITestDefaults standardUserDefaults] integerForKey:@"HDMIAudioOffsetMS"]==-40&&host.output.audioSyncStepper.integerValue==-40,@"earlier offset saved in fake preferences and stepper");
     [host.output resetAudioSync:nil];
     Check(host.output.audioSyncField.integerValue==0&&[[UITestDefaults standardUserDefaults] integerForKey:@"HDMIAudioOffsetMS"]==0,@"Reset clears adjustment");
+    [host.output.source selectItemAtIndex:4];[host.output sourceChanged:nil];
+    Check(!host.output.desktopDisplay.hiddenOrHasHiddenAncestor&&host.output.desktopDisplay.enabled,@"Desktop display selector visible and enabled");
+    Check(host.output.source.numberOfItems==6&&!host.output.showTimecode.enabled&&host.output.choose.hidden,@"Desktop source keeps editor-only controls and movie chooser separate");
+    [host.output.source selectItemAtIndex:5];[host.output sourceChanged:nil];
+    Check(host.output.desktopDisplay.hidden&&!host.output.extendedHint.hidden&&!host.output.sizing.hidden&&[host.output.start.title isEqual:@"Start extended display"],@"Extended display has separate source, sizing and drag-windows hint without creating a display");
+    for(NSInteger c=0;c<4;++c){[host.output.connector selectItemAtIndex:c];[host.output.mode selectItemAtIndex:2];[host.output connectorChanged:nil];Check(host.output.mode.indexOfSelectedItem==((c==1||c==2)?0:2),@"connector choice constrains output format without starting USB");}
+    [host.output.connector selectItemAtIndex:0];[host.output connectorChanged:nil];
+    [host showIdle:nil];CheckControl(host.window.contentView,host.idle.sizing,host.idle,@selector(screenChanged:),@"Idle media sizing");
+    for(NSInteger s=0;s<3;++s){[host.idle.sizing selectItemAtIndex:s];[host.idle screenChanged:nil];Check([[UITestDefaults standardUserDefaults] integerForKey:@"HDMIIdleSizing"]==s,@"idle fit/fill/stretch preference saves exactly");}[host.idle.sizing selectItemAtIndex:0];[host.idle screenChanged:nil];[host showOutput:nil];
     [host.output.source selectItemAtIndex:1];[host.output sourceChanged:nil];
     CheckControl(host.window.contentView,host.output.choose,host.output,@selector(chooseMovie:),@"Movie chooser remains available");
     CheckControl(host.window.contentView,host.output.loop,nil,nullptr,@"Movie loop remains available");
@@ -208,6 +250,10 @@ extern "C" int CombinedUITestMain(int argc,char** argv){@autoreleasepool {
     if(argc>2){NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[2]) atomically:YES];}
     if(argc>3){[host showCapture:nil];NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[3]) atomically:YES];}
     if(argc>4){[host showOutput:nil];[host.output.source selectItemAtIndex:1];[host.output sourceChanged:nil];[host.output.mode selectItemAtIndex:2];host.output.fileLabel.stringValue=@"Example movie.mov";host.output.audioRouteLabel.stringValue=@"Output: System speakers";host.output.loop.state=NSControlStateValueOn;NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[4]) atomically:YES];}
+    if(argc>5){[host showOutput:nil];[host.output.source selectItemAtIndex:4];[host.output sourceChanged:nil];host.output.audioRouteLabel.stringValue=@"Output: System speakers";NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[5]) atomically:YES];}
+    if(argc>6){[host showPicture:nil];NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[6]) atomically:YES];}
+    if(argc>7){[host showIdle:nil];NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[7]) atomically:YES];}
+    if(argc>8){[host showOutput:nil];[host.output.source selectItemAtIndex:5];[host.output sourceChanged:nil];NSView* v=host.window.contentView;auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];[[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(argv[8]) atomically:YES];}
     Check([NSApp.mainMenu itemAtIndex:2].submenu!=nil,@"Help menu retains setup and diagnostics");
     Check(audioWrites==0&&cmioWrites==0&&taskLaunches==0,@"zero audio writes, CMIO writes and helper launches");
     [host.output applicationWillTerminate:[NSNotification notificationWithName:NSApplicationWillTerminateNotification object:app]];

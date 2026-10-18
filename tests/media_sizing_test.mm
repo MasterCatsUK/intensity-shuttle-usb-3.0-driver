@@ -1,0 +1,18 @@
+// GPL-2.0-or-later. Synthetic private fixture, isolated preferences, no USB or audio route.
+#import <AVFoundation/AVFoundation.h>
+#include "IdleScreen.hpp"
+#include <cassert>
+#include <unistd.h>
+int main(){@autoreleasepool{
+    NSString *path=[NSTemporaryDirectory() stringByAppendingPathComponent:[NSUUID.UUID.UUIDString stringByAppendingString:@".mov"]];
+    NSError *error=nil;AVAssetWriter *writer=[[AVAssetWriter alloc] initWithURL:[NSURL fileURLWithPath:path] fileType:AVFileTypeQuickTimeMovie error:&error];assert(writer);
+    AVAssetWriterInput *input=[AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:@{AVVideoCodecKey:AVVideoCodecTypeH264,AVVideoWidthKey:@320,AVVideoHeightKey:@240}];
+    AVAssetWriterInputPixelBufferAdaptor *adaptor=[AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:input sourcePixelBufferAttributes:@{(NSString*)kCVPixelBufferPixelFormatTypeKey:@(kCVPixelFormatType_32BGRA),(NSString*)kCVPixelBufferWidthKey:@320,(NSString*)kCVPixelBufferHeightKey:@240}];
+    [writer addInput:input];assert([writer startWriting]);[writer startSessionAtSourceTime:kCMTimeZero];
+    for(int n=0;n<10;++n){CVPixelBufferRef pixel=nullptr;assert(CVPixelBufferCreate(nullptr,320,240,kCVPixelFormatType_32BGRA,nullptr,&pixel)==kCVReturnSuccess);CVPixelBufferLockBaseAddress(pixel,0);auto data=(uint8_t*)CVPixelBufferGetBaseAddress(pixel);size_t stride=CVPixelBufferGetBytesPerRow(pixel);for(int y=0;y<240;++y)for(int x=0;x<320;++x){auto p=data+y*stride+x*4;p[0]=0;p[1]=n>=5?255:0;p[2]=n<5?255:0;p[3]=255;}CVPixelBufferUnlockBaseAddress(pixel,0);while(!input.readyForMoreMediaData)usleep(1000);assert([adaptor appendPixelBuffer:pixel withPresentationTime:CMTimeMake(n,25)]);CFRelease(pixel);}
+    [input markAsFinished];[writer endSessionAtSourceTime:CMTimeMake(10,25)];dispatch_semaphore_t done=dispatch_semaphore_create(0);[writer finishWritingWithCompletionHandler:^{dispatch_semaphore_signal(done);}];assert(!dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,10*NSEC_PER_SEC)));assert(writer.status==AVAssetWriterStatusCompleted);
+    for(unsigned m=0;m<6;++m)for(long fit=0;fit<3;++fit){auto mode=shuttle_output::Mode(m);auto p=shuttle_output::profile(mode);MovieSource source(path.UTF8String,mode,shuttle_output::sizingValue(fit),false);std::vector<uint8_t> frame;std::vector<int32_t> pcm;source.read(0,frame,pcm);assert(frame.size()==size_t(p.width)*p.height*2);assert(frame[(p.height/2*p.width+p.width/2)*2+1]>50);for(auto sample:pcm)assert(sample==0);if(p.width==1920)assert((frame[(p.height/2*p.width+10)*2+1]<20)==(fit==0));}
+    CFStringRef domain=CFSTR("local.shuttle.test.media36");CFPreferencesSetAppValue(CFSTR("HDMIIdleScreen"),(__bridge CFNumberRef)@4,domain);CFPreferencesSetAppValue(CFSTR("HDMIIdleMovie"),(__bridge CFStringRef)path,domain);CFPreferencesSetAppValue(CFSTR("HDMIIdleSizing"),(__bridge CFNumberRef)@1,domain);CFPreferencesAppSynchronize(domain);
+    shuttle_idle::Screen idle(shuttle_output::Mode::HD1080p25,domain);std::vector<uint8_t> frame;bool red=false,green=false,repeated=false;for(unsigned n=0;n<23;++n){idle.apply(frame,false);assert(frame.size()==1920*1080*2);unsigned y=frame[(540*1920+960)*2+1];if(y<90){if(green)repeated=true;red=true;}else green=true;assert(frame[(540*1920+10)*2+1]>40);}assert(red&&green&&repeated);
+    for(NSString *key in @[@"HDMIIdleScreen",@"HDMIIdleMovie",@"HDMIIdleSizing"])CFPreferencesSetAppValue((__bridge CFStringRef)key,nullptr,domain);CFPreferencesAppSynchronize(domain);[[NSFileManager defaultManager] removeItemAtPath:path error:nil];puts("PASS: decoded Fit/Fill/Stretch at all six output modes; exact rasters; silent looping idle movie restarts.");
+}}

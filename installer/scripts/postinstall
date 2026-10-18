@@ -15,7 +15,7 @@ console_uid=$(/bin/cat "$state/console-uid")
 /usr/bin/codesign --verify --deep --strict "$app"
 /usr/bin/codesign --verify --deep --strict "$audio"
 [[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") == local.shuttle.camera ]] || exit 1
-[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist") == 31 ]] || exit 1
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist") == 39 ]] || exit 1
 [[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$audio/Contents/Info.plist") == local.shuttle.audio ]] || exit 1
 [[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$audio/Contents/Info.plist") == 3 ]] || exit 1
 /usr/bin/codesign --verify --deep --strict "$premiere"
@@ -27,7 +27,7 @@ console_uid=$(/bin/cat "$state/console-uid")
 if [[ -d $output && ! -L $output && $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$output/Contents/Info.plist") == local.shuttle.output ]]; then
     /bin/mv "$output" "$backup/Retired Shuttle Output.app"
 fi
-message='Installation complete. The interface is simpler; diagnostics and driver setup are under Help. About and Quit are in the Shuttle Camera menu. Capture extension15, HDMI output extension12, audio HAL3 and the Premiere transmitter are unchanged. No driver reactivation is needed for an enabled setup.'
+message='Installation complete. Stretch desktop output follows resolution changes in macOS Displays and fills the selected video frame. Camera17/output12/HAL3/Premiere1 are unchanged; no driver reactivation is needed when already enabled. Read Whats-New-0.1.39.md.'
 # An identical audio reinstallation does not interrupt any sound devices.
 unchanged=false
 if [[ -d "$backup/Shuttle Audio.driver" ]] && /usr/bin/diff -qr "$backup/Shuttle Audio.driver" "$audio" >/dev/null 2>&1; then unchanged=true; fi

@@ -1,6 +1,7 @@
 // GPL-2.0-or-later. SD television standards and rational frame timing.
 #pragma once
 #include <cstdint>
+#include "PictureControls.hpp"
 namespace shuttle {
 struct VideoProfile {
     bool ntsc=false;
@@ -16,6 +17,7 @@ struct VideoProfile {
 enum class OutputSize { Native, SquarePixels, Size1280x960, Size1440x1080 };
 struct CaptureSettings {
     VideoProfile profile;
+    PictureSettings picture;
     uint32_t videoInput=0x06000000, audioInput=0x10000000;
     bool blackOnDropout=false;
     OutputSize outputSize=OutputSize::Native;

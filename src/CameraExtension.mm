@@ -38,6 +38,7 @@ static NSError *failure(NSString *message) {
     shuttle::CaptureSettings _settings;
     shuttle::VideoProfile _profile;
     std::unique_ptr<shuttle::Scale422> _scaler;
+    std::shared_ptr<shuttle::PictureControls> _pictureControls;
     shuttle_audio::Packetizer _packetizer;
     std::atomic<unsigned> _detected;
     std::mutex _picturesLock;
@@ -59,11 +60,13 @@ static NSError *failure(NSString *message) {
 - (void)acceptAudio:(const bmusb::FrameAllocator::Frame &)audio offset:(size_t)offset timecode:(uint16_t)timecode;
 - (Pixel)pixelWithBytes:(const uint8_t *)bytes;
 - (void)outputTick;
+- (void)updatePicture:(shuttle::PictureSettings)settings;
 @end
 @implementation ShuttleStream
 - (instancetype)initWithSettings:(shuttle::CaptureSettings)settings {
     if((self=[super init])) {
         _settings=settings;_profile=settings.profile;_detected=0;
+        _pictureControls=std::make_shared<shuttle::PictureControls>(settings.picture);
         _scaler.reset(new shuttle::Scale422(_profile.height(),settings.outputWidth(),settings.outputHeight()));
         _streaming=false;_audioFD=-1;_dropUntil=0;_syncUntil=0;
         _outputQueue=dispatch_queue_create("local.shuttle.camera.playout",DISPATCH_QUEUE_SERIAL);
@@ -194,6 +197,7 @@ static NSError *failure(NSString *message) {
         if(sent<0 && !_audioErrorLogged) { NSLog(@"Shuttle audio send failed: %s",strerror(errno));_audioErrorLogged=true; }
     });
 }
+- (void)updatePicture:(shuttle::PictureSettings)settings { std::atomic_store(&_pictureControls,std::make_shared<shuttle::PictureControls>(settings)); }
 - (Pixel)pixelWithBytes:(const uint8_t *)bytes {
     CVPixelBufferRef pixel=nullptr;
     NSDictionary *attributes=@{(__bridge NSString *)kCVPixelBufferIOSurfacePropertiesKey:@{}};
@@ -218,8 +222,10 @@ static NSError *failure(NSString *message) {
     uint64_t now=hostNS();if(now<_dropUntil) return;
     uint64_t start=_clock.video(tc,now);if(!start) return;
     @autoreleasepool {
+        auto controls=std::atomic_load(&_pictureControls);
         for(unsigned field=0;field<2;++field) {
             auto bytes=shuttle::fieldImage(frame.data+offset,v,field);
+            controls->apply(bytes.data(),720,_profile.height(),1440);
             if(now<_syncUntil) {
                 uint8_t level=(start+field*_profile.fieldNS())%1000000000ULL<200000000ULL?235:16;
                 for(size_t n=0;n<bytes.size();n+=4) { bytes[n]=bytes[n+2]=128;bytes[n+1]=bytes[n+3]=level; }
@@ -299,7 +305,7 @@ static NSError *failure(NSString *message) {
     if([properties containsObject:CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID]) p.linkedCoreAudioDeviceUID=@"local.shuttle.audio.stereo";
     if([properties containsObject:SettingsProperty]) {
         NSMutableDictionary *state=[_configuration mutableCopy];state[@"detected_standard"]=_video.detectedStandard;
-        state[@"capturing"]=@(_video.inUse);
+        state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;
         auto *attributes=[CMIOExtensionPropertyAttributes propertyAttributesWithMinValue:nil maxValue:nil validValues:nil readOnly:NO];
         [p setPropertyState:[CMIOExtensionPropertyState propertyStateWithValue:settingsJSON(state) attributes:attributes] forProperty:SettingsProperty];
     }return p;
@@ -309,12 +315,25 @@ static NSError *failure(NSString *message) {
     if(!value) return YES;
     NSMutableDictionary *incoming=[settingsDictionary(value) mutableCopy];
     if(incoming && !incoming[@"output_size"]) incoming[@"output_size"]=_configuration[@"output_size"]?:@"Native";
+    for(NSString *key in @[@"brightness",@"contrast",@"colour",@"sharpness"]) if(incoming && !incoming[key]) incoming[key]=_configuration[key]?:defaultSettings()[key];
     shuttle::CaptureSettings settings;
     if(!parseSettings(incoming,settings)) { if(error) *error=failure(@"Invalid capture settings.");return NO; }
-    if(_video.inUse) { if(error) *error=failure(@"Close all movie recording and camera windows before applying settings.");return NO; }
     NSMutableDictionary *clean=[NSMutableDictionary dictionary];
-    for(NSString *key in defaultSettings()) clean[key]=incoming[key];
+    for(NSString *key in defaultSettings()) clean[key]=incoming[key]?:defaultSettings()[key];
     if([clean isEqual:_configuration]) return YES;
+    BOOL pictureOnly=YES;
+    for(NSString *key in @[@"standard",@"video_input",@"audio_input",@"dropout",@"output_size"])
+        if(![clean[key] isEqual:_configuration[key]])pictureOnly=NO;
+    if(pictureOnly){
+        // Swap immutable control settings at a frame boundary. The USB engine,
+        // stream identity, frame cadence and independent audio keep running.
+        [_video updatePicture:settings.picture];_configuration=[clean copy];
+        [NSUserDefaults.standardUserDefaults setObject:_configuration forKey:@"ShuttleCaptureSettings"];
+        NSMutableDictionary *state=[clean mutableCopy];state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;state[@"detected_standard"]=_video.detectedStandard;
+        [_device notifyPropertiesChanged:@{SettingsProperty:[CMIOExtensionPropertyState propertyStateWithValue:settingsJSON(state)]}];
+        return YES;
+    }
+    if(_video.inUse) { if(error) *error=failure(@"Close all movie recording and camera windows before changing inputs or format.");return NO; }
     return _applyConfiguration?_applyConfiguration(clean,error):NO;
 }
 @end

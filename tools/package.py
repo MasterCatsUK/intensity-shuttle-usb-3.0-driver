@@ -5,7 +5,7 @@ import sys
 
 app, ext = map(Path, sys.argv[1:])
 common = dict(CFBundleDevelopmentRegion="en", CFBundleShortVersionString="0.1",
-              CFBundleVersion="15", LSMinimumSystemVersion="27.0")
+              CFBundleVersion="17", LSMinimumSystemVersion="27.0")
 host = dict(common, CFBundleIdentifier="local.shuttle.camera", CFBundleName="Shuttle Camera",
             CFBundleExecutable="ShuttleCamera", CFBundlePackageType="APPL",
             NSHighResolutionCapable=True,

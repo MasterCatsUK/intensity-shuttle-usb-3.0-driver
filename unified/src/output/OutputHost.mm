@@ -1,3 +1,4 @@
+#include "ExtendedDisplaySize.hpp"
 // GPL-2.0-or-later. Local HDMI output controls, independent of camera activation.
 #import <Cocoa/Cocoa.h>
 #import <SystemExtensions/SystemExtensions.h>
@@ -7,6 +8,8 @@
 #include "AudioSync.hpp"
 #include "Timecode.hpp"
 #include "AudioMeters.hpp"
+#include "FrameSizing.hpp"
+#include "../ExtendedDisplay.mm"
 @interface OutputCanvas : NSView
 @end
 @implementation OutputCanvas
@@ -17,8 +20,12 @@
 @property BOOL activationOnly;
 @property BOOL embedded;
 @property NSWindow* window;
-@property NSPopUpButton* mode;
+@property NSPopUpButton* mode,*connector,*sizing;
+@property ShuttleExtendedDisplay* extendedDisplay;
+@property NSTextField* extendedHint;
 @property NSPopUpButton* source;
+@property NSPopUpButton* desktopDisplay;
+@property NSTextField* desktopLabel;
 @property NSButton* choose;
 @property NSButton* start;
 @property NSButton* stop;
@@ -91,23 +98,31 @@ static bool timelineOutputReady(NSInteger mode) {
     NSView* v=self.window.contentView;
     [v addSubview:label(@"Source",NSMakeRect(24,453,115,24),13)];
     self.source=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(150,450,476,30)];
-    [self.source addItemsWithTitles:@[@"Test pattern",@"Movie file",@"Final Cut Pro",@"Premiere Pro"]];self.source.target=self;self.source.action=@selector(sourceChanged:);[v addSubview:self.source];
+    [self.source addItemsWithTitles:@[@"Test pattern",@"Movie file",@"Final Cut Pro",@"Premiere Pro",@"Mac desktop",@"Extended display"]];self.source.target=self;self.source.action=@selector(sourceChanged:);[v addSubview:self.source];
     NSInteger savedSource=[[NSUserDefaults standardUserDefaults] integerForKey:@"OutputSource"];
-    if(savedSource>=0&&savedSource<4)[self.source selectItemAtIndex:savedSource];
-    [v addSubview:label(@"HDMI format",NSMakeRect(24,413,115,24),13)];
-    self.mode=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(150,410,476,30)];
+    if(savedSource>=0&&savedSource<6)[self.source selectItemAtIndex:savedSource];
+    [v addSubview:label(@"Output",NSMakeRect(24,413,115,24),13)];
+    self.mode=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(344,410,282,30)];
     [self.mode addItemsWithTitles:@[@"PAL · 576i50",@"1080i50",@"1080p25",@"NTSC · 480i59.94",@"1080i59.94",@"1080p29.97"]];
+    self.connector=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(150,410,180,30)];[self.connector addItemsWithTitles:@[@"HDMI",@"S-Video",@"Composite",@"Component"]];NSInteger savedConnector=[NSUserDefaults.standardUserDefaults integerForKey:@"OutputConnector"];[self.connector selectItemAtIndex:savedConnector>=0&&savedConnector<4?savedConnector:0];self.connector.target=self;self.connector.action=@selector(connectorChanged:);self.connector.accessibilityLabel=@"Output connector";self.connector.toolTip=@"Choose the connector in use. Compatible outputs may stay active simultaneously. S-Video and Composite require PAL/NTSC; analogue output still needs a live test.";[v addSubview:self.connector];
     NSInteger index=[[NSUserDefaults standardUserDefaults] integerForKey:@"OutputMode"];
     if(index>=0&&index<6)[self.mode selectItemAtIndex:index];[v addSubview:self.mode];
     self.choose=[NSButton buttonWithTitle:@"Choose movie…" target:self action:@selector(chooseMovie:)];self.choose.frame=NSMakeRect(24,368,140,30);[v addSubview:self.choose];
-    self.fileLabel=label(@"No movie selected",NSMakeRect(174,372,310,24),12);self.fileLabel.lineBreakMode=NSLineBreakByTruncatingMiddle;[v addSubview:self.fileLabel];
-    self.loop=[NSButton checkboxWithTitle:@"Loop" target:nil action:nil];self.loop.frame=NSMakeRect(516,370,110,26);self.loop.state=[[NSUserDefaults standardUserDefaults] boolForKey:@"LoopMovie"]?NSControlStateValueOn:NSControlStateValueOff;[v addSubview:self.loop];
+    self.fileLabel=label(@"No movie selected",NSMakeRect(174,372,136,24),12);self.fileLabel.lineBreakMode=NSLineBreakByTruncatingMiddle;[v addSubview:self.fileLabel];
+    self.loop=[NSButton checkboxWithTitle:@"Loop" target:nil action:nil];self.loop.frame=NSMakeRect(320,370,80,26);self.loop.state=[[NSUserDefaults standardUserDefaults] boolForKey:@"LoopMovie"]?NSControlStateValueOn:NSControlStateValueOff;[v addSubview:self.loop];
+    self.desktopLabel=label(@"Display",NSMakeRect(24,373,115,24),13);[v addSubview:self.desktopLabel];
+    self.desktopDisplay=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(150,370,250,30)];
+    CGDirectDisplayID displays[32];uint32_t count=0;CGGetActiveDisplayList(32,displays,&count);
+    for(uint32_t n=0;n<count;++n){auto id=displays[n];[self.desktopDisplay addItemWithTitle:[NSString stringWithFormat:@"Display %u · %zu × %zu%@",n+1,CGDisplayPixelsWide(id),CGDisplayPixelsHigh(id),id==CGMainDisplayID()?@" · Main":@""]];self.desktopDisplay.lastItem.representedObject=@(id);}
+    [v addSubview:self.desktopDisplay];
+    self.sizing=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(410,370,216,30)];[self.sizing addItemsWithTitles:@[@"Fit",@"Fill",@"Stretch"]];[self.sizing selectItemAtIndex:long(shuttle_output::sizingValue([NSUserDefaults.standardUserDefaults integerForKey:@"PlaybackSizing"]))];self.sizing.accessibilityLabel=@"Video sizing";self.sizing.toolTip=@"Fit keeps the whole image with borders. Fill crops to cover the frame. Stretch fills the frame without preserving aspect ratio and follows desktop resolution changes while output runs.";[v addSubview:self.sizing];
+    self.extendedHint=label(@"Drag windows to Shuttle Extended Display.",NSMakeRect(24,372,376,24),12);[v addSubview:self.extendedHint];
     self.start=[NSButton buttonWithTitle:@"Start output" target:self action:@selector(startOutput:)];self.start.frame=NSMakeRect(24,326,190,34);self.start.bezelStyle=NSBezelStyleRounded;[v addSubview:self.start];
     self.stop=[NSButton buttonWithTitle:@"Stop" target:self action:@selector(stopOutput:)];self.stop.frame=NSMakeRect(224,326,100,34);self.stop.enabled=NO;[v addSubview:self.stop];
     self.readinessLabel=label(@"Stopped",NSMakeRect(24,300,602,20),12);self.readinessLabel.textColor=NSColor.secondaryLabelColor;[v addSubview:self.readinessLabel];
     self.outputHelp=label(@"",NSZeroRect,12); // Available through Help, not on the main panel.
     auto* audioTitle=label(@"AUDIO",NSMakeRect(24,270,602,20),11);audioTitle.font=[NSFont boldSystemFontOfSize:11];audioTitle.textColor=NSColor.secondaryLabelColor;[v addSubview:audioTitle];
-    self.useHDMIAudio=[NSButton buttonWithTitle:@"Use HDMI audio" target:self action:@selector(useHDMIAudio:)];self.useHDMIAudio.frame=NSMakeRect(24,236,140,30);self.useHDMIAudio.toolTip=@"Use Shuttle HDMI for Mac media sound. The previous output restores when you stop.";[v addSubview:self.useHDMIAudio];
+    self.useHDMIAudio=[NSButton buttonWithTitle:@"Use Shuttle Audio" target:self action:@selector(useHDMIAudio:)];self.useHDMIAudio.frame=NSMakeRect(24,236,140,30);self.useHDMIAudio.toolTip=@"Use the Shuttle for Mac media sound through its compatible audio outputs. The previous output restores when you stop.";[v addSubview:self.useHDMIAudio];
     self.restoreAudio=[NSButton buttonWithTitle:@"Restore audio" target:self action:@selector(restoreAudio:)];self.restoreAudio.frame=NSMakeRect(174,236,130,30);[v addSubview:self.restoreAudio];
     NSButton* audioSettings=[NSButton buttonWithTitle:@"Sound settings…" target:self action:@selector(openAudioSettings:)];audioSettings.frame=NSMakeRect(476,236,150,30);[v addSubview:audioSettings];
     self.audioRouteLabel=label(@"",NSMakeRect(24,215,602,18),11);self.audioRouteLabel.textColor=NSColor.secondaryLabelColor;self.audioRouteLabel.lineBreakMode=NSLineBreakByTruncatingMiddle;[v addSubview:self.audioRouteLabel];
@@ -127,7 +142,7 @@ static bool timelineOutputReady(NSInteger mode) {
     self.actionSafe=[NSButton checkboxWithTitle:@"Action safe (90%)" target:self action:@selector(safeZonesChanged:)];self.actionSafe.frame=NSMakeRect(340,28,286,26);self.actionSafe.state=[[NSUserDefaults standardUserDefaults] boolForKey:@"ShowHDMIActionSafe"]?NSControlStateValueOn:NSControlStateValueOff;[v addSubview:self.actionSafe];
     self.diagnosticsScroll=[[NSScrollView alloc] initWithFrame:NSMakeRect(0,0,650,300)];self.diagnosticsScroll.hasVerticalScroller=YES;self.diagnosticsScroll.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;
     self.log=[[NSTextView alloc] initWithFrame:self.diagnosticsScroll.bounds];self.log.editable=NO;self.log.font=[NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];self.log.textColor=NSColor.textColor;self.log.backgroundColor=NSColor.textBackgroundColor;self.diagnosticsScroll.documentView=self.log;
-    [self sourceChanged:nil];
+    [self connectorChanged:nil];[self sourceChanged:nil];
     [self beginAudioRouteMonitoring];
     if(self.embedded)return;
     [self.window center];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
@@ -159,7 +174,7 @@ static bool timelineOutputReady(NSInteger mode) {
     OSStatus status=AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject,&address,dispatch_get_main_queue(),self.audioRouteListener);
     if(status){self.audioRouteListener=nil;[self outputMessage:[NSString stringWithFormat:@"Could not watch Mac audio-output changes: %@. Current output is still checked before restoration.",errorText(status)]];}
     [self refreshAudioRoute];
-    if(self.previousMediaAudioUID.length)[self outputMessage:@"A previous audio output was saved by an earlier session. Click Restore audio to recover it, or Use HDMI audio to use that saved route for this session. Audio has not been changed at startup."];
+    if(self.previousMediaAudioUID.length)[self outputMessage:@"A previous audio output was saved by an earlier session. Click Restore audio to recover it, or Use Shuttle Audio to use that saved route for this session. Audio has not been changed at startup."];
 }
 - (void)refreshAudioRoute {
     using namespace shuttle_audio_route;
@@ -216,17 +231,24 @@ static bool timelineOutputReady(NSInteger mode) {
     else {[self clearSavedAudioRoute];[self outputMessage:[NSString stringWithFormat:@"%@: restored Mac media audio to %@.",reason,name(previous)]];}
     [self refreshAudioRoute];
 }
+- (void)connectorChanged:(id)sender {
+    auto target=static_cast<shuttle_output::Connector>(self.connector.indexOfSelectedItem);
+    [self.mode selectItemAtIndex:shuttle_output::compatibleMode(target,unsigned(MAX(0,self.mode.indexOfSelectedItem)))];
+    self.mode.autoenablesItems=NO;for(unsigned n=0;n<6;++n)[self.mode itemAtIndex:n].enabled=shuttle_output::connectorSupports(target,n);
+    [NSUserDefaults.standardUserDefaults setInteger:self.connector.indexOfSelectedItem forKey:@"OutputConnector"];
+}
 - (void)sourceChanged:(id)sender {
     NSInteger source=self.source.indexOfSelectedItem;
     [[NSUserDefaults standardUserDefaults] setInteger:source forKey:@"OutputSource"];
-    self.outputHelp.stringValue=source==3?@"Start Premiere output here before enabling Mercury Transmit.\nIn Premiere Settings → Playback, select Intensity Shuttle — HDMI Output.\nFor sound, select Intensity Shuttle — HDMI Audio in Audio Hardware.\nDisable Mercury Transmit before stopping output here.":@"Close Shuttle camera windows before output. Stop output before capturing.\nFor timeline sound, click Use HDMI audio before opening Final Cut.\nStart Final Cut output here and wait for Ready before enabling A/V Output.\nTurn off Final Cut’s A/V Output before stopping output here.";
+    self.outputHelp.stringValue=source==5?@"Start output to create Shuttle Extended Display, then drag windows onto it. Use System Settings → Displays to arrange it. The display disappears when output stops. Experimental: this uses an undocumented macOS interface and may stop working after a system update. Screen-recording permission is required.":source==4?@"Choose a display and start mirroring. Allow Screen & System Audio Recording when macOS asks. Click Use Shuttle Audio to send Mac media sound to the TV. Stop restores your saved sound output.":source==3?@"Start Premiere output here before enabling Mercury Transmit.\nIn Premiere Settings → Playback, select Intensity Shuttle — HDMI Output.\nFor sound, select Intensity Shuttle — HDMI Audio in Audio Hardware.\nDisable Mercury Transmit before stopping output here.":@"Close Shuttle camera windows before output. Stop output before capturing.\nFor timeline sound, click Use Shuttle Audio before opening Final Cut.\nStart Final Cut output here and wait for Ready before enabling A/V Output.\nTurn off Final Cut’s A/V Output before stopping output here.";
     self.choose.enabled=!self.task;self.loop.enabled=source==1&&!self.task;
-    self.start.title=source==2?@"Start Final Cut":source==3?@"Start Premiere":@"Start output";
+    self.desktopDisplay.hidden=self.desktopLabel.hidden=source!=4;self.extendedHint.hidden=source!=5;self.sizing.hidden=source!=1&&source!=4&&source!=5;
+    self.start.title=source==5?@"Start extended display":source==4?@"Start mirroring":source==2?@"Start Final Cut":source==3?@"Start Premiere":@"Start output";
     self.choose.hidden=self.fileLabel.hidden=self.loop.hidden=source!=1;
     self.source.toolTip=self.outputHelp.stringValue;
     self.audioSyncField.enabled=source>=2;self.audioSyncStepper.enabled=source>=2;self.resetAudioSync.enabled=source>=2;
-    self.showTimecode.enabled=source>=2;
-    self.timecodePosition.enabled=source>=2;
+    self.showTimecode.enabled=source==2||source==3;
+    self.timecodePosition.enabled=source==2||source==3;
     if(!self.task)self.readinessLabel.stringValue=@"Stopped";
 }
 - (void)audioSyncChanged:(id)sender {
@@ -266,7 +288,7 @@ static bool timelineOutputReady(NSInteger mode) {
     [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response){if(response==NSModalResponseOK){self.movie=panel.URL.path;self.fileLabel.stringValue=self.movie.lastPathComponent;[self.source selectItemAtIndex:1];[self sourceChanged:nil];}}];
 }
 - (void)setRunning:(BOOL)running {
-    self.mode.enabled=!running;self.source.enabled=!running;self.choose.enabled=!running;self.loop.enabled=!running&&self.source.indexOfSelectedItem==1;self.start.enabled=!running;self.stop.enabled=running||self.managesMediaAudio;
+    self.connector.enabled=self.sizing.enabled=!running;self.desktopDisplay.enabled=!running;self.mode.enabled=!running;self.source.enabled=!running;self.choose.enabled=!running;self.loop.enabled=!running&&self.source.indexOfSelectedItem==1;self.start.enabled=!running;self.stop.enabled=running||self.managesMediaAudio;
 }
 - (void)checkTimelineReadiness:(NSTimer*)timer {
     if(!self.task.running){[timer invalidate];self.readinessTimer=nil;return;}
@@ -286,21 +308,31 @@ static bool timelineOutputReady(NSInteger mode) {
 - (void)startOutput:(id)sender {
     if(self.task)return;
     self.startupFailed=NO;
+    if(self.source.indexOfSelectedItem==4||self.source.indexOfSelectedItem==5){
+        if(self.source.indexOfSelectedItem==4&&!self.desktopDisplay.selectedItem.representedObject){[self outputMessage:@"No connected display is available."];return;}
+        if(!CGPreflightScreenCaptureAccess()){CGRequestScreenCaptureAccess();self.readinessLabel.stringValue=@"Allow screen recording in System Settings, then reopen Shuttle Camera.";return;}
+    }
     if(self.source.indexOfSelectedItem==1&&!self.movie){[self chooseMovie:nil];return;}
     if(self.source.indexOfSelectedItem>=2){[self.window makeFirstResponder:nil];[self audioSyncChanged:self.audioSyncField];}
+    if(self.source.indexOfSelectedItem==5){
+        auto size=shuttle_output::extendedDisplaySize(shuttle_output::Mode(self.mode.indexOfSelectedItem));unsigned w=size.width,h=size.height;
+        self.extendedDisplay=[ShuttleExtendedDisplay new];NSString *error=nil;if(![self.extendedDisplay startWidth:w height:h error:&error]){self.extendedDisplay=nil;self.readinessLabel.stringValue=error?:@"Extended display unavailable.";return;}
+    }
     // The USB sender brings the CMIO device online, never the other way round.
+    [[NSUserDefaults standardUserDefaults] setInteger:self.sizing.indexOfSelectedItem forKey:@"PlaybackSizing"];
     [[NSUserDefaults standardUserDefaults] setInteger:self.mode.indexOfSelectedItem forKey:@"OutputMode"];
     [[NSUserDefaults standardUserDefaults] setBool:self.loop.state==NSControlStateValueOn forKey:@"LoopMovie"];
     NSString* mode=@[@"576i50",@"1080i50",@"1080p25",@"480i5994",@"1080i5994",@"1080p2997"][self.mode.indexOfSelectedItem];
+    [[NSUserDefaults standardUserDefaults] synchronize];
     self.task=[NSTask new];self.task.executableURL=[[NSBundle mainBundle].executableURL.URLByDeletingLastPathComponent URLByAppendingPathComponent:@"ShuttlePlayback"];
-    self.task.arguments=self.source.indexOfSelectedItem==3?@[@"--premiere",mode,@"live"]:self.source.indexOfSelectedItem==2?@[@"--sink",mode,@"live"]:self.source.indexOfSelectedItem==1?@[self.loop.state==NSControlStateValueOn?@"--loop":@"--play",mode,self.movie]:@[@"--bars",mode,@"30"];
-    NSPipe* pipe=[NSPipe pipe];self.task.standardOutput=pipe;self.task.standardError=pipe;self.log.string=self.source.indexOfSelectedItem==2?@"Starting timeline output…\nUse HDMI audio sends Mac media sound to the Shuttle. Stop restores the saved output unless you select another device.\n":@"Starting output…\n";
+    self.task.arguments=self.source.indexOfSelectedItem==5?@[@"--desktop",mode,[@(self.extendedDisplay.displayID) stringValue]]:self.source.indexOfSelectedItem==4?@[@"--desktop",mode,[self.desktopDisplay.selectedItem.representedObject stringValue]]:self.source.indexOfSelectedItem==3?@[@"--premiere",mode,@"live"]:self.source.indexOfSelectedItem==2?@[@"--sink",mode,@"live"]:self.source.indexOfSelectedItem==1?@[self.loop.state==NSControlStateValueOn?@"--loop":@"--play",mode,self.movie]:@[@"--bars",mode,@"30"];
+    NSPipe* pipe=[NSPipe pipe];self.task.standardOutput=pipe;self.task.standardError=pipe;self.log.string=self.source.indexOfSelectedItem==2?@"Starting timeline output…\nUse Shuttle Audio sends Mac media sound to the Shuttle. Stop restores the saved output unless you select another device.\n":@"Starting output…\n";
     __weak OutputHost* weakSelf=self;
     pipe.fileHandleForReading.readabilityHandler=^(NSFileHandle* h){NSData* data=h.availableData;if(!data.length){h.readabilityHandler=nil;return;}NSString* text=[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];if(text)dispatch_async(dispatch_get_main_queue(),^{OutputHost* host=weakSelf;if(host){[host handleOutputText:text];}});};
-    self.task.terminationHandler=^(NSTask* task){dispatch_async(dispatch_get_main_queue(),^{OutputHost* host=weakSelf;if(!host||host.task!=task)return;[host.readinessTimer invalidate];host.readinessTimer=nil;[host.log.textStorage appendAttributedString:[[NSAttributedString alloc] initWithString:task.terminationStatus==0?@"Output stopped.\n":@"Output ended; open Help → Diagnostics.\n"]];host.task=nil;host.readinessLabel.stringValue=!host.startupFailed&&task.terminationStatus==0?@"Output is stopped.":@"Output failed — Help → Diagnostics.";[host restorePreviousAudio:@"Output ended" explicit:NO];[host setRunning:NO];});};
-    NSError* error=nil;if(![self.task launchAndReturnError:&error]){self.log.string=error.localizedDescription;self.task=nil;self.readinessLabel.stringValue=@"Output could not start — Help → Diagnostics.";[self restorePreviousAudio:@"Output could not start" explicit:NO];return;}[self setRunning:YES];
+    self.task.terminationHandler=^(NSTask* task){dispatch_async(dispatch_get_main_queue(),^{OutputHost* host=weakSelf;if(!host||host.task!=task)return;[host.readinessTimer invalidate];host.readinessTimer=nil;[host.log.textStorage appendAttributedString:[[NSAttributedString alloc] initWithString:task.terminationStatus==0?@"Output stopped.\n":@"Output ended; open Help → Diagnostics.\n"]];host.task=nil;[host.extendedDisplay stop];host.extendedDisplay=nil;host.readinessLabel.stringValue=!host.startupFailed&&task.terminationStatus==0?@"Output is stopped.":@"Output failed — Help → Diagnostics.";[host restorePreviousAudio:@"Output ended" explicit:NO];[host setRunning:NO];});};
+    NSError* error=nil;if(![self.task launchAndReturnError:&error]){self.log.string=error.localizedDescription;self.task=nil;[self.extendedDisplay stop];self.extendedDisplay=nil;self.readinessLabel.stringValue=@"Output could not start — Help → Diagnostics.";[self restorePreviousAudio:@"Output could not start" explicit:NO];return;}[self setRunning:YES];
     self.readinessLabel.stringValue=self.source.indexOfSelectedItem==3?@"Starting…":self.source.indexOfSelectedItem==2?@"Starting…":@"Running";
-    if(self.source.indexOfSelectedItem>=2){
+    if(self.source.indexOfSelectedItem==2||self.source.indexOfSelectedItem==3){
         self.readinessDeadline=[NSDate dateWithTimeIntervalSinceNow:8];
         self.readinessTimer=[NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer* timer){[weakSelf checkTimelineReadiness:timer];}];
     }
@@ -308,6 +340,7 @@ static bool timelineOutputReady(NSInteger mode) {
 - (void)handleOutputText:(NSString*)text {
     [self.log.textStorage appendAttributedString:[[NSAttributedString alloc] initWithString:text attributes:@{NSForegroundColorAttributeName:NSColor.textColor}]];
     if(self.log.string.length>32768)[self.log.textStorage deleteCharactersInRange:NSMakeRange(0,self.log.string.length-24576)];[self.log scrollRangeToVisible:NSMakeRange(self.log.string.length,0)];
+    if((self.source.indexOfSelectedItem==4||self.source.indexOfSelectedItem==5)&&[self.log.string containsString:@"Desktop mirror ready"])self.readinessLabel.stringValue=self.source.indexOfSelectedItem==5?@"Extended display running":@"Mirroring desktop";
     if(self.source.indexOfSelectedItem==3&&[self.log.string containsString:@"Premiere USB ready"]){[self.readinessTimer invalidate];self.readinessTimer=nil;self.readinessLabel.stringValue=@"Ready for Premiere";}
 }
 - (void)stopOutput:(id)sender {[self.readinessTimer invalidate];self.readinessTimer=nil;if(self.task.running){if(!self.startupFailed)self.readinessLabel.stringValue=@"Stopping output…";[self.task terminate];}[self restorePreviousAudio:@"Output stopped" explicit:NO];}
@@ -326,6 +359,7 @@ static bool timelineOutputReady(NSInteger mode) {
     [self restorePreviousAudio:@"Shuttle Camera quit" explicit:NO];
     if(self.audioRouteListener){auto address=shuttle_audio_route::mediaOutputAddress();AudioObjectRemovePropertyListenerBlock(kAudioObjectSystemObject,&address,dispatch_get_main_queue(),self.audioRouteListener);self.audioRouteListener=nil;}
     if(self.task.running){[self.task terminate];[self.task waitUntilExit];}
+    [self.extendedDisplay stop];self.extendedDisplay=nil;
 }
 @end
 int main(int argc,const char**argv){@autoreleasepool {NSApplication* app=[NSApplication sharedApplication];app.activationPolicy=NSApplicationActivationPolicyRegular;if(argc==3&&!strcmp(argv[1],"--render")){app.activationPolicy=NSApplicationActivationPolicyAccessory;app.appearance=[NSAppearance appearanceNamed:NSAppearanceNameAqua];}OutputHost* host=[OutputHost new];app.delegate=host;[app run];}return 0;}

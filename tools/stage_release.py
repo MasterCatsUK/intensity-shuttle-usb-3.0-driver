@@ -6,9 +6,9 @@ stage=root/'build/release-source/shuttle-camera-development'
 if stage.exists():
  raise SystemExit('Staging already exists. Move build/release-source aside before rebuilding; it was not overwritten.')
 stage.mkdir(parents=True)
-ignore=shutil.ignore_patterns('build','.git','.DS_Store','__pycache__','*.o','*.log','*.app','*.driver','*.bundle')
+ignore=shutil.ignore_patterns('build','.git','.DS_Store','__pycache__','*.o','*.log','*.app','*.driver','*.bundle','qa')
 for path in root.iterdir():
- if path.name in ['build','.git','.DS_Store']:continue
+ if path.name in ['build','.git','.DS_Store','qa'] or path.suffix in ('.log','.o'):continue
  target=stage/path.name
  if path.is_dir():shutil.copytree(path,target,ignore=ignore)
  else:shutil.copy2(path,target)

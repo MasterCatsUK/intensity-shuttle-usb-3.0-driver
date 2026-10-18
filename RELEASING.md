@@ -1,22 +1,19 @@
-# Preparing a GitHub release
+# Update the existing GitHub repository
 
-This folder is ready to upload as a source repository. Version 0.1.31 replaces the older icon-pack artwork with an original SVHS cassette icon created from a text-only brief. No older artwork or Git history is included.
+Target: https://github.com/andrewvideo/intensity-shuttle-usb-3.0
 
-## Upload the source
+## Repository contents
 
-1. Create an empty repository on github.com using your chosen name.
-2. Upload this folder’s contents, including hidden .gitignore and .gitattributes files, or commit and push them with Git. Do not upload the parent outputs folder.
-3. Keep LICENSE, COPYING, third-party notices, vendor sources and the user guide together with the code.
-4. Set your own support/contact details in the repository. Review the publisher checklist before making release claims.
+Upload or commit the contents of this source folder to the existing repository root, including hidden .gitignore/.gitattributes. README.md becomes the main GitHub README page automatically; docs/user-guide contains matching illustrated Markdown, HTML and PDF copies. Preserve licences and vendor sources. Do not upload the outer packaging folder as a nested repository.
 
-Adobe’s SDK is not included; developers obtain it separately. The README explains building. Generated packages and ZIPs are excluded from Git by .gitignore.
+The application code corresponds to 0.1.39. Documentation and the screenshot renderer have been refreshed for this upload. The existing 0.1.39 installer is byte-for-byte unchanged; its embedded Source.zip contains its original build-time documentation. Use the refreshed external source/guide assets for current reading.
 
-## Attach binaries as release assets
+## GitHub Release assets
 
-Create a GitHub Release for version 0.1.31 and attach the matching full installer, complete ZIP and SHA256SUMS.txt from the companion release folder. The complete ZIP contains the installer, source and illustrated guide. Do not attach older 0.1.30 packages or archives: those contain the previous restricted icon.
+Create a release tagged v0.1.39 after uploading the source. Attach the companion full installer, complete distribution ZIP, refreshed source ZIP and SHA256SUMS.txt from Release Assets. Use RELEASE-DESCRIPTION.md from the outer upload bundle as the release text. Binary packages/ZIPs are deliberately ignored by the repository .gitignore; put them in Releases instead of source commits.
 
-Describe this as an **experimental development build**, with its unsigned/ad-hoc signing and SIP-disabled runtime requirements clearly visible. Source publication is distinct from qualifying a normal consumer installer. The installer has not been signed or notarized with Developer ID. The icon update does not change that. Read docs/user-guide/Read Me.pdf before installation.
+The README links to the Releases page. Until assets are uploaded there, that link does not imply a downloadable installer is already published. Update the repository About description with ABOUT-TEXT.txt from the outer bundle; the current online description still names the earlier version.
 
-The 0.1.31 source builds and package checks were completed locally. The installed 0.1.30 features were tested on one Mac Studio; the 0.1.31 artwork/version update has not been installed or tested on a fresh Mac. Nothing has been published to GitHub by this preparation.
+Describe it as an experimental Apple-silicon development build. The unsigned installer/ad-hoc components, SIP-disabled runtime and unqualified fresh-machine installation must remain visible. The icon replacement was completed in 0.1.31; it does not provide signing/notarization qualification. Do not redistribute older0.1.30 artwork/packages.
 
-Do not include Adobe SDK downloads, private signing keys, personal recordings, local logs, or older artwork in repository history or release assets.
+Do not include Adobe SDK files, signing material, personal recordings or local diagnostics. Before a consumer release, follow the publisher checklist for Developer ID/notarization and qualification with SIP enabled. Nothing has been uploaded by this local preparation.

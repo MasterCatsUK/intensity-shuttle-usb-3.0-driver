@@ -13,7 +13,7 @@ struct MovieSource::Impl {
     std::vector<uint8_t> lastPicture;
     ~Impl(){if(pendingAudio)CFRelease(pendingAudio);[reader cancelReading];}
 };
-MovieSource::MovieSource(const std::string& file,shuttle_output::Mode mode):impl(new Impl) { @autoreleasepool {
+MovieSource::MovieSource(const std::string& file,shuttle_output::Mode mode,shuttle_output::Sizing sizing,bool withAudio):impl(new Impl) { @autoreleasepool {
     auto& s=*impl;s.profile=shuttle_output::profile(mode);
     AVURLAsset* asset=[AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:@(file.c_str())] options:nil];
     auto tracks=[asset tracksWithMediaType:AVMediaTypeVideo];if(!tracks.count)throw std::runtime_error("The file has no readable video track");
@@ -42,19 +42,19 @@ MovieSource::MovieSource(const std::string& file,shuttle_output::Mode mode):impl
     CGRect bounds=CGRectApplyAffineTransform(CGRectMake(0,0,track.naturalSize.width,track.naturalSize.height),transform);
     if(bounds.size.width<=0||bounds.size.height<=0)throw std::runtime_error("Invalid video dimensions");
     const double outputPAR=s.profile.pixelAspect();
-    double fit=std::min(s.profile.width*outputPAR/bounds.size.width,s.profile.height/bounds.size.height);
+    auto fitted=shuttle_output::destination(bounds.size.width,bounds.size.height,s.profile.width,s.profile.height,outputPAR,sizing);
     transform=CGAffineTransformConcat(transform,CGAffineTransformMakeTranslation(-bounds.origin.x,-bounds.origin.y));
-    transform=CGAffineTransformConcat(transform,CGAffineTransformMakeScale(fit/outputPAR,fit));
-    transform=CGAffineTransformConcat(transform,CGAffineTransformMakeTranslation((s.profile.width-bounds.size.width*fit/outputPAR)/2,(s.profile.height-bounds.size.height*fit)/2));
+    transform=CGAffineTransformConcat(transform,CGAffineTransformMakeScale(fitted.width/bounds.size.width,fitted.height/bounds.size.height));
+    transform=CGAffineTransformConcat(transform,CGAffineTransformMakeTranslation(fitted.x,fitted.y));
     [layer setTransform:transform atTime:kCMTimeZero];instruction.layerInstructions=@[layer];composition.instructions=@[instruction];s.video.videoComposition=composition;
     if(![s.reader canAddOutput:s.video])throw std::runtime_error("Cannot decode movie video");[s.reader addOutput:s.video];
     auto audioTracks=[asset tracksWithMediaType:AVMediaTypeAudio];
-    if(audioTracks.count) {
+    if(withAudio&&audioTracks.count) {
         s.audio=[[AVAssetReaderAudioMixOutput alloc] initWithAudioTracks:audioTracks audioSettings:@{AVFormatIDKey:@(kAudioFormatLinearPCM),AVSampleRateKey:@48000,AVNumberOfChannelsKey:@2,AVLinearPCMBitDepthKey:@32,AVLinearPCMIsFloatKey:@YES,AVLinearPCMIsNonInterleaved:@NO}];
         if(![s.reader canAddOutput:s.audio])throw std::runtime_error("Cannot decode movie audio");[s.reader addOutput:s.audio];
     }
     if(![s.reader startReading])throw std::runtime_error(s.reader.error.localizedDescription.UTF8String?:"Movie decoding failed");
-    printf("Movie: %.3f seconds; letterbox fit to %ux%u; %.5f fps; stereo audio %s\n",s.seconds,s.profile.width,s.profile.height,double(s.profile.rateNom)/s.profile.rateDen,s.audio?"available":"absent");
+    printf("Movie: %.3f seconds; scaled to %ux%u; %.5f fps; stereo audio %s\n",s.seconds,s.profile.width,s.profile.height,double(s.profile.rateNom)/s.profile.rateDen,s.audio?"available":"absent");
 } }
 MovieSource::~MovieSource()=default;
 double MovieSource::duration()const{return impl->seconds;}

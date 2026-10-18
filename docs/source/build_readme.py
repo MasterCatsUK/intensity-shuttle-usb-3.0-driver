@@ -29,109 +29,125 @@ def image(b,file,caption):b.append(('image',(file,caption)))
 def table(b,headers,rows):b.append(('table',(headers,rows)))
 def link(key):title,url=links[key];return f'<a href="{url}">{title}</a>'
 
+
 b=page('Read this first')
-p(b,'<b>Shuttle Camera 0.1.31</b> · Installation and user guide · 18 October 2026')
-p(b,'Capture VHS and other standard-definition sources, play movie files through HDMI, or monitor Final Cut Pro and Premiere Pro through the USB 3 Intensity Shuttle.')
-b.append(('notice','<b>Development build — security changes required.</b> The installer is unsigned; its app and extensions are ad-hoc signed and not Apple-notarized. This build requires SIP to be disabled. Apple describes disabling these checks as a temporary development measure, not a normal public-release setup. Read page 2 before deciding whether to install. '+link('extension')+'.'))
-h(b,'What you need')
-bullets(b,['An Apple-silicon Mac. This installer requires macOS 27 or later; testing was on a Mac Studio with macOS 27.0.1. Other machines and later macOS releases are not guaranteed.','A Blackmagic Intensity Shuttle <b>USB 3</b>, a working USB 3 cable/adapter, and administrator access. The Thunderbolt Shuttle and Intel Macs are not supported by this installer.','For VHS: a working VCR, S-Video or composite video, and red/white RCA audio cables. For output: a TV or monitor connected to the Shuttle’s HDMI OUT.','A current backup and permission to change security settings. Do not change security on a managed/work Mac without its administrator’s approval.'])
-h(b,'How it works')
-p(b,'Shuttle Camera configures the device. Record into a separate camera app such as QuickTime Player. For movie or editor HDMI output, leave Shuttle Camera open with output started. Capture and playback share the USB interface: use one at a time.')
-h(b,'Guide map')
-table(b,['Page','Topic'],[['2','Security preparation'],['3','Install and enable the extensions'],['4','Capture VHS'],['5','HDMI movie playback and formats'],['6','Final Cut Pro and Premiere Pro'],['7','Sound, sync and overlays'],['8','Troubleshooting and limitations'],['9','Removal, security restoration and files']])
-p(b,'Screenshots show the real 0.1.31 interface with example settings. Your selected input, output device and positions may differ. This guide is independent of Blackmagic Design, Apple and Adobe; it is not their official driver documentation.')
+p(b,'<b>Shuttle Camera 0.1.39</b> - Installation and user guide - 18 October 2026')
+p(b,'Capture PAL/NTSC VHS, play movie files, monitor Final Cut Pro or Premiere Pro, and send a Mac desktop through the Intensity Shuttle USB 3.0.')
+b.append(('notice','<b>Experimental development build.</b> The installer is unsigned; its components are ad-hoc signed and not notarized. The current installer requires SIP disabled. Read Security preparation before deciding to install. This is an independent project, not an official Blackmagic Design driver.'))
+h(b,'Requirements')
+bullets(b,['Apple-silicon Mac and macOS 27 or later. Testing was on one Mac Studio with macOS 27.0.1; other machines/releases are not comprehensively qualified.','Intensity Shuttle USB 3.0, working USB 3 cable/adapter, and administrator access. Intel Macs and the Thunderbolt Shuttle are not included.','VCR with S-Video or composite and RCA stereo for tape capture. A compatible TV/monitor or recorder for playback.'])
+h(b,'One device, two workflows')
+p(b,'The Capture tab configures the camera feed; record with a separate camera app such as QuickTime Player. Video Output sends movies, editor frames or a desktop to the device. Capture and playback share the USB interface: use one at a time.')
+h(b,'What is new')
+p(b,'Live input picture adjustments, capture-resolution retention, idle pictures/movies with a delay, connector-format choices, desktop mirroring, experimental extended display, and Stretch that follows live desktop resolution changes.')
+p(b,'The following pages cover security, installation, capture, Picture, movie output, Final Cut, Premiere, desktops, scaling, idle screens, audio/overlays, troubleshooting and removal. Screenshots are current native app views rendered with demonstration settings. They contain no personal footage; selected values are examples.')
 
 b=page('Security preparation')
-p(b,'<b>Make this decision before installing.</b> SIP protects parts of macOS against unauthorized changes. Turning it off weakens protection across the Mac, not just this app. Developer mode relaxes extension validation. Neither setting makes downloaded software trustworthy. '+link('sip')+'; '+link('extension')+'.')
-h(b,'1. Turn off SIP in Recovery — Apple silicon only')
-steps(b,['Save your work and shut down the Mac. Press and hold its power button until startup options appear. Choose <b>Options → Continue</b>; select an administrator and authenticate if asked.','In Recovery, choose <b>Utilities → Terminal</b>. Enter the command below. Follow the displayed prompts for the intended startup system, then restart normally.'])
+p(b,'SIP protects macOS. Disabling it weakens protection across the Mac. Apple describes this as temporary development use; restore it after testing. '+link('sip')+'.')
+h(b,'The tested development setup')
+steps(b,['Save work, back up important files and shut down. On Apple silicon, hold the power button until startup options appear. Choose <b>Options > Continue</b> and authenticate when requested. '+link('recovery')+'.','In Recovery choose <b>Utilities > Terminal</b>. Run the following, then restart into normal macOS.'])
 code(b,'csrutil disable')
-p(b,'These are Recovery instructions; running the command in an ordinary desktop Terminal will not complete the change. '+link('recovery')+'.')
-h(b,'2. Check the status in normal macOS')
+p(b,'Check the status in normal Terminal:')
 code(b,'csrutil status')
-p(b,'The installer checks for <b>System Integrity Protection status: disabled.</b> Do not use partial-disable flags as a substitute: this installer has not been qualified with them.')
-h(b,'3. Enable extension developer mode')
-p(b,'In normal macOS, open Terminal and run:')
+p(b,'The installer requires the fully disabled status; partial-disable combinations are not qualified. No supplied build script changes SIP. Building source alone does not require changing security.')
+h(b,'Extension developer mode')
+p(b,'Apple describes developer mode as relaxing the location check for extensions loaded outside normal application directories. The supplied installer puts the host in Applications. For developers reproducing the outside-Applications build setup, the command is: '+link('extension')+'.')
 code(b,'sudo systemextensionsctl developer on')
-p(b,'Enter your Mac administrator password; Terminal does not show password characters. This is the development configuration used during testing. It is separate from SIP. '+link('extension')+'.')
-h(b,'What is not required')
-p(b,'These are camera system extensions and a Core Audio plug-in, not a kernel extension. This guide does not ask you to enable third-party kernel extensions, disable FileVault, disable authenticated-root protection or globally disable Gatekeeper. Follow the specific SIP procedure rather than unrelated kext instructions.')
-b.append(('notice','<b>Can SIP be turned on immediately afterwards?</b> Do not assume this build will continue working with SIP enabled. That configuration has not been qualified, and its installer refuses installation/updates while SIP is enabled. Restore SIP when you finish testing or remove this build; page 9 explains how.'))
+p(b,'This is separate from screen-recording permission. Do not use it as a generic fix for camera or microphone access.')
+h(b,'Restoration and limits')
+p(b,'Use the removal/restoration steps at the end when finished. Continued operation after reenabling SIP has not been qualified for this ad-hoc build. This guide does not require disabling FileVault, authenticated-root protection or Gatekeeper globally, or enabling kernel extensions.')
 
 b=page('Install and enable')
-h(b,'Install the package')
-steps(b,['Disable external output in Premiere/Final Cut and quit those editors. Stop output and quit Shuttle Camera. Close QuickTime recording windows and other camera previews.','Open <b>Shuttle-Capture-0.1.31.pkg</b>. Install on the current macOS startup volume and enter your administrator password when macOS asks.','If Gatekeeper blocks the package, first verify that it came from a source you trust. Where macOS offers it, use <b>System Settings → Privacy &amp; Security → Open Anyway</b> for this specific package. Do not turn off Gatekeeper globally. '+link('gatekeeper')+'.','Let installation finish. Open <b>Shuttle Camera</b> from Applications. The installer preserves existing settings and backs up older Shuttle bundles.'])
-h(b,'Verify a downloaded copy')
-p(b,'In Terminal, type the following and drag the downloaded package into the window after the final space, then press Return:')
-code(b,'shasum -a 256 ')
-p(b,'Compare the result with the SHA256SUMS.txt supplied with this exact release:')
-code(b,'shasum -a 256 /path/to/Shuttle-Capture-0.1.31.pkg')
-p(b,'Compare all 64 checksum characters. A matching hash detects a different file; it does not replace trusting the publisher or Apple notarization.')
-h(b,'First installation: enable both camera extensions')
-steps(b,['In Shuttle Camera, choose <b>Help → Driver Setup → Enable Camera</b>.','Choose <b>Help → Driver Setup → Enable HDMI Output</b> if you want editor HDMI output.','If macOS asks for approval, open <b>System Settings → General → Login Items &amp; Extensions → Camera Extensions</b>. Enable <b>Shuttle Camera Extension</b> and <b>Shuttle HDMI Output Extension</b>.','Quit and reopen Shuttle Camera after activation. Restart if macOS says a restart is required. Approve camera/microphone access for the recording app when requested.'])
-p(b,'An existing installation with both extensions already enabled does not need reactivation for the 0.1.31 interface update. First-time installation may refresh Core Audio and briefly interrupt sound; restart if the audio devices are missing.')
+steps(b,['Obtain <b>Shuttle-Capture-0.1.39.pkg</b> from a trusted project release. The GitHub source-code ZIP is not the installer. Compare its SHA-256 with the release checksums.','Disable editor external output. Stop capture/playback and quit Shuttle Camera, the editors and camera apps.','Open the package, check that its heading says <b>0.1.39</b>, and install on the current startup volume. Enter your administrator password in macOS when requested.','If macOS blocks an unsigned package, verify its source first. If you choose to proceed, use the specific package exception under Privacy & Security where offered; do not globally disable Gatekeeper. '+link('gatekeeper')+'.'])
+h(b,'First installation: enable the drivers')
+steps(b,['Open Shuttle Camera from Applications. Choose <b>Help > Driver Setup > Enable Camera</b>. For editor output, choose <b>Enable HDMI Output</b>.','Approve <b>Shuttle Camera Extension</b> and <b>Shuttle HDMI Output Extension</b> under System Settings > General > Login Items & Extensions > Camera Extensions.','Reopen Shuttle Camera and camera/editor clients after activation. Restart only if macOS requests it or the installed audio driver has not loaded.'])
+p(b,'An existing camera 17/output 12 installation does not need reactivation for this update. The installer backs up replaced bundles. An unchanged audio driver avoids a Core Audio restart; a first-time audio installation may briefly interrupt sound.')
+h(b,'Check the package')
+code(b,'shasum -a 256 /path/to/Shuttle-Capture-0.1.39.pkg')
+p(b,'Compare the whole result with the matching release SHA256SUMS.txt. A checksum verifies file identity, not publisher trust or notarization.')
 
 b=page('Capture VHS')
-image(b,'capture.png','Capture panel. This example uses PAL composite video and 768 × 576 square-pixel output; select S-Video when using that cable.')
-steps(b,['Connect VCR video OUT to the matching Shuttle input. Connect red/white audio OUT to the Shuttle’s analog RCA inputs. Connect the Shuttle to USB 3 and press Play on the VCR.','Choose <b>PAL</b> or <b>NTSC</b>, the correct <b>Video input</b>, and <b>Analog RCA</b>. Choose a resolution and video-loss behavior, then click <b>Apply</b>. Close capture previews before changing settings.','In QuickTime Player, choose <b>File → New Movie Recording</b>. Select the Intensity Shuttle camera and <b>Intensity Shuttle — Stereo Audio</b> as the microphone. Check both picture and audio meter before recording.'])
-p(b,'PAL: native 720 × 576 or square-pixel 768 × 576. NTSC: native 720 × 480 or square-pixel 640 × 480. Both also offer 1280 × 960 and 1440 × 1080 (4:3). Larger sizes are scaled, with no extra tape detail. PAL 50 fps / NTSC 59.94 fps capture uses bob deinterlacing of the source fields.')
-p(b,'<b>On video loss:</b> Hold last frame repeats the last picture; Black substitutes black. Dropout handling preserves the timing rather than shortening the recording, but it cannot recover a damaged tape signal. Check a short recorded clip for sound and sync before a long transfer.')
+image(b,'capture.png','Capture controls with example PAL/S-Video settings. Match the cable and tape standard.')
+steps(b,['Connect VCR video OUT to the matching Shuttle input and red/white audio OUT to its RCA inputs. Connect USB 3 and play the tape.','Choose <b>PAL</b> or <b>NTSC</b>, the video input, <b>Analog RCA</b>, resolution and signal-loss behaviour. Close previews and click <b>Apply</b>.','In QuickTime choose <b>File > New Movie Recording</b>. Select the Shuttle camera and <b>Intensity Shuttle - Stereo Audio</b> microphone. Check picture, levels and a short recording before a long transfer.'])
+p(b,'PAL sizes: native 720x576, square 768x576, 1280x960 or 1440x1080. NTSC: native 720x480, square 640x480, 1280x960 or 1440x1080. Larger 4:3 sizes are scaled and add no tape detail. Bob deinterlacing gives 50 fps PAL / approximately 59.94 fps NTSC.')
+p(b,'Hold last frame or Black preserves capture timing during signal loss; it cannot repair an unstable tape signal. Apply commits format changes. Refresh reloads the active camera settings.')
 
-b=page('Play a movie over HDMI')
-image(b,'movie.png','Movie file controls with illustrative settings. Example movie.mov is a placeholder; no movie was opened or played to make this screenshot.')
-steps(b,['Connect the display directly to the Shuttle’s <b>HDMI OUT</b>. Close all Shuttle camera previews.','Choose <b>Video Output → Source → Movie file</b>, then <b>Choose movie…</b>. Select the HDMI format.','Enable <b>Loop</b> to repeat the movie. Click <b>Start output</b>; use <b>Stop</b> when finished. Movie audio travels through the Shuttle; Use HDMI audio is not needed for the movie file’s own sound.'])
-table(b,['HDMI format','Picture format / cadence'],[['PAL · 576i50','720 × 576; 50 fields/s'],['NTSC · 480i59.94','720 × 486 output raster; 59.94 fields/s'],['1080i50 / 1080i59.94','1920 × 1080; 50 / 59.94 fields/s'],['1080p25 / 1080p29.97','1920 × 1080; 25 / 29.97 frames/s']])
-p(b,'A TV may round 59.94 to “60” and 29.97 to “30”. Use Test pattern for a short display/cable test. Capture resolution and HDMI output format are separate settings. Capture cannot run at the same time as USB playback.')
+b=page('Live picture controls')
+image(b,'picture.png','Picture controls update the camera feed while a preview is open.')
+steps(b,['Start the VCR and open the capture preview. In <b>Picture</b>, leave <b>Live adjustments</b> enabled.','Adjust <b>Brightness</b>, <b>Contrast</b>, <b>Colour</b> (saturation) and <b>Sharpness</b>. Watch the preview while moving a slider.','Use <b>Reset picture</b> for neutral processing. Check your recording before committing a long transfer.'])
+p(b,'These are software input-picture adjustments, applied to the camera feed rather than the tape. They do not control HDMI playback colour format. Changing video standard/input/resolution still needs Apply with previews closed.')
+p(b,'If controls are unavailable, use Capture > Refresh. An older active camera extension may require activation with previews closed. Do not keep clicking Enable when the current driver is already ready.')
 
-b=page('Final Cut Pro and Premiere Pro')
-h(b,'Final Cut Pro — tested with 11.2')
-steps(b,['Close Shuttle capture previews. In Shuttle Camera → Video Output choose <b>Final Cut Pro</b> and a format matching the timeline, for example <b>1080p25</b> for 25 fps.','Click <b>Use HDMI audio</b>, then <b>Start Final Cut</b>. Wait for <b>Ready for Final Cut</b>. Keep Shuttle Camera open.','In Final Cut, choose <b>Settings → Playback → A/V Output → Intensity Shuttle — HDMI Output</b>. Enable <b>Window → A/V Output</b>, then scrub and play.','When finished, turn <b>Window → A/V Output</b> off first; then click Stop in Shuttle Camera. Restore audio if needed. Turning A/V Output off alone does not restore the Mac’s normal sound route.'])
-h(b,'Premiere Pro — tested with 25.2.3 (2025)')
-steps(b,['In Shuttle Camera → Video Output choose <b>Premiere Pro</b> and the matching HDMI format. Click <b>Start Premiere</b> and wait for <b>Ready for Premiere</b>.','In Premiere, choose <b>Settings/Preferences → Playback</b>. Enable <b>Mercury Transmit</b> and tick the video stream for <b>Intensity Shuttle — HDMI Output</b>. This is separate from the original Blackmagic Playback entry.','For sound, choose <b>Intensity Shuttle — HDMI Audio</b> in Premiere’s <b>Audio Hardware → Default Output</b>. The Mercury Transmit plug-in is video-only; its empty Transmit audio-stream column is expected.','Play or scrub the sequence. Leave Shuttle Camera running. If output disappears when Premiere is in the background, check Premiere’s Disable video output when in the background setting.','Disable Mercury Transmit before stopping output. If you explicitly selected the HDMI audio device in Premiere, select your normal output in Premiere Audio Hardware afterwards.'])
-h(b,'If the output device is missing')
-p(b,'Restart Premiere after installing its plug-in. Final Cut publishes the device after the matching USB sender is ready. Start with matching timeline/output rates; conversion between arbitrary frame rates has not been qualified. The current installer places Premiere’s transmitter in the legacy <b>Plug-ins</b> folder used by the tested Premiere 2025 installation, not the differently named Plugins folder.')
-p(b,'Close one editor’s external output before using another. The same physical Shuttle cannot serve two simultaneous playback sessions.')
+b=page('Movie playback and formats')
+image(b,'movie.png','Choose a movie, select Fit/Fill/Stretch and optionally loop it. The filename is illustrative.')
+steps(b,['Close camera previews. Select <b>Movie file</b>, click <b>Choose movie</b> and select an output connector and format.','Select sizing, enable <b>Loop</b> if desired and click <b>Start output</b>. Use Stop when finished. The movie supplies its own sound; Use Shuttle Audio is not required for it.'])
+table(b,['Output format','Wire raster / cadence'],[['PAL 576i50','720x576 / 50 fields per second'],['NTSC 480i59.94','720x486 / approximately 59.94 fields per second'],['1080i50 /1080i59.94','1920x1080 / 50 or approximately 59.94 fields per second'],['1080p25 /1080p29.97','1920x1080 / 25 or approximately 29.97 frames per second']])
+p(b,'S-Video and composite use PAL/NTSC. HDMI/component keep supported SD/HD formats. Compatible connectors may remain active together; the selection constrains formats, not an exclusive switch. Separate HD-plus-downconverted-SD output is not implemented.')
+
+b=page('Final Cut Pro output')
+image(b,'output.png','Final Cut output settings and monitoring controls; example values are shown.')
+steps(b,['Choose <b>Final Cut Pro</b> and a format appropriate to the timeline. Click <b>Use Shuttle Audio</b> if sound should follow the device.','Click <b>Start Final Cut</b> and wait for <b>Ready for Final Cut</b>. Keep Shuttle Camera open.','In Final Cut Pro 11, choose <b>Settings > Playback > A/V Output > Intensity Shuttle - HDMI Output</b>. Enable <b>Window > A/V Output</b> and play or scrub.','When finished, disable Final Cut A/V Output first, then Stop in Shuttle Camera. Turning A/V Output off alone does not restore the Mac sound route.'])
+p(b,'The Shuttle output is SD/HD, not 4K. Rendering/downscaling of a 4K timeline takes place in the editor. Compare the same section with A/V Output off if playback becomes choppy, and check timeline/output cadence before changing driver settings.')
+
+b=page('Premiere Pro output')
+image(b,'premiere.png','Premiere source selection. Video and audio are selected separately in Premiere.')
+steps(b,['Choose <b>Premiere Pro</b> and the matching format. Click <b>Start Premiere</b> and wait for <b>Ready for Premiere</b>.','In Premiere Pro 2025 Playback settings enable <b>Mercury Transmit</b> and the video stream for <b>Intensity Shuttle - HDMI Output</b>.','In <b>Audio Hardware > Default Output</b> select <b>Intensity Shuttle - HDMI Audio</b>. The Transmit plug-in is video-only; an empty audio-stream column is expected.','Disable Mercury Transmit before stopping output. Restore any explicit Premiere audio-device selection inside Premiere itself.'])
+p(b,'Restart Premiere after plug-in installation. Its original Blackmagic Playback entry is separate from this project. If output disappears in the background, check Premiere\'s Disable video output when in the background option. Close one editor\'s external output before using another.')
+
+b=page('Mirror or extend the desktop')
+image(b,'extended.png','Extended display with Stretch selected. Start creates a separate Mac desktop.')
+steps(b,['Choose <b>Mac desktop</b> to mirror an existing screen, or <b>Extended display</b> for a separate desktop. Select connector, video format and sizing.','Grant <b>Screen & System Audio Recording</b> permission to Shuttle Camera in Privacy & Security when requested; reopen the app afterwards.','Start output. For Extended display, arrange <b>Shuttle Extended Display</b> in macOS Displays, then drag windows onto it. Use Shuttle Audio if Mac media sound should follow it.','Stop removes the virtual display and restores the saved audio route.'])
+p(b,'PAL/NTSC start with a 1024x768 desktop scaled to SD; HD starts with 1920x1080. macOS may offer other desktop sizes. The virtual desktop uses 60 Hz and is sampled into the selected video cadence. It is not a direct GPU monitor connection.')
+p(b,'Extended display uses an undocumented macOS interface and may change after an OS update. Protected media may not be capturable. ScreenCaptureKit captures video here; audio uses the separate Core Audio route.')
+
+b=page('Fit, Fill and Stretch')
+table(b,['Sizing','Result'],[['Fit','Keeps the whole image and its proportions; adds borders when needed.'],['Fill','Fills without distortion by cropping the edges.'],['Stretch','Maps the whole image into the whole output frame; proportions can change.']])
+h(b,'Change desktop resolutions while output runs')
+steps(b,['Stop output and choose <b>Stretch</b> in Video Output, then start it.','Select the virtual/mirrored screen in macOS Displays and choose a desktop resolution. The whole current screen now fills the fixed video frame without restarting the sender.','For Fit/Fill, restart output after changing desktop resolution so their preserved-aspect geometry is recalculated.'])
+p(b,'Live software tests covered all eleven requested desktop sizes into HD, PAL and NTSC output surfaces: 1920x1080, 1600x1200, 1600x900, 1344x1008, 1344x756, 1280x960, 1280x720, 1024x768, 1024x576, 960x540 and 800x600. Available choices depend on the screen.')
+p(b,'A 4:3 desktop stretched to 16:9 becomes wider. This is intentional Stretch behaviour. Desktop resolution, capture resolution and physical video timing are three different settings. Choosing a larger desktop does not add 4K or 1080p50/60 Shuttle wire output.')
+h(b,'Media and idle pictures')
+p(b,'The same sizing choices are available for movie playback and idle pictures/movies. Restart output after changing idle sizing or media. The software accounts for PAL/NTSC pixel proportions when calculating Fit/Fill.')
+
+b=page('Choose an idle screen')
+image(b,'idle.png','Example idle picture using the original project icon, with a two-minute delay.')
+steps(b,['In <b>Idle Screen</b>, choose Hold last frame, Black, Colour bars, Picture or Movie loop (silent).','Use <b>Choose media</b> for a picture/movie. Choose Fit/Fill/Stretch and a <b>Show after</b> delay.','Restart output to apply the saved choice. Keep output running; playback or scrubbing restores new editor video immediately.'])
+p(b,'The default is two minutes without newly received editor frames. Delay choices are Immediately, 30 seconds, 1/2/5/10 minutes or Never. This replaces idle editor output, not a camera input-loss picture.')
+p(b,'An idle movie loops silently. Keep the original movie file available at its saved location; an imported still is copied to Application Support. Missing/unreadable media falls back to black with a diagnostic.')
 
 b=page('Sound, sync and overlays')
-h(b,'Choose the right audio device')
-table(b,['Task','Audio selection'],[['VHS recording','Intensity Shuttle — Stereo Audio as the recording app’s microphone'],['Final Cut HDMI monitoring','Use HDMI audio in Shuttle Camera before starting editor output'],['Premiere HDMI monitoring','Intensity Shuttle — HDMI Audio in Premiere Audio Hardware'],['Movie file output','Sound comes from the selected movie file']])
-p(b,'<b>Use HDMI audio</b> changes the Mac’s default media output and saves its previous choice. Stop, helper exit or app quit restores that choice only if the route is still Shuttle HDMI. A later manual change is respected. This does not restore an explicit per-application output selected inside Premiere; change that in Premiere itself.')
-h(b,'Adjust audio sync')
-p(b,'Use <b>Audio sync</b> in Video Output while timeline monitoring. Negative values move sound earlier; positive values delay it. Range: −100 to +500 ms. If sound is slightly late, try −20 ms, press Return, and compare again. Wait about a second between adjustments. The stepper changes by 10 ms; Reset returns to zero. A live adjustment can briefly click or skip. This setting is for timeline HDMI sound, not capture recording.')
-h(b,'HDMI overlays')
-bullets(b,['<b>Timecode:</b> TC HH:MM:SS:FF from the editor, with a DF marker for drop-frame. Dashes mean valid timecode was not supplied. It is not an invented elapsed counter.','<b>L/R audio meters:</b> independent stereo levels with peak hold and clip indication. The meters show sound sent to HDMI.','<b>Positions:</b> top left, top right, bottom left, bottom right, top centre or bottom centre. Timecode and meters have separate positions.','<b>Title safe (80%) / Action safe (90%):</b> optional white/yellow guides. These are the app’s guide percentages, not a guarantee of compliance with a broadcaster’s delivery specification.'])
-p(b,'Overlays affect the outgoing HDMI picture only; they do not burn into the source file or editor project. Settings are saved and update live. Timecode is available for editor output; meters and safe guides also work with movie playback.')
-h(b,'Menus')
-p(b,'<b>Shuttle Camera → About</b> shows the version; <b>Quit (⌘Q)</b> closes the app. <b>Help → Output Setup</b> gives source-specific instructions. <b>Help → Diagnostics</b> opens the technical log. <b>Help → Driver Setup</b> contains the extension enable/disable actions.')
+table(b,['Task','Audio selection'],[['Capture recording','Intensity Shuttle - Stereo Audio microphone'],['Final Cut / Mac media','Use Shuttle Audio in Shuttle Camera'],['Premiere monitoring','Intensity Shuttle - HDMI Audio in Audio Hardware'],['Movie playback','Sound from the selected movie file']])
+p(b,'<b>Use Shuttle Audio</b> changes the Mac media output and saves its previous selection. Stop, helper exit or app quit restores it while the route is still the Shuttle; a later manual change is respected. Compatible device outputs can carry sound, though the Core Audio device keeps its existing HDMI Audio name. An explicit Premiere selection must be restored in Premiere.')
+h(b,'Timeline audio sync')
+p(b,'Negative values move sound earlier; positive values delay it. Range: -100 to +500 ms, with 10 ms stepper increments. Press Return after typing a value and compare after about a second. Reset returns to zero. This is for timeline output, not capture recording; adjustments can briefly click or skip.')
+h(b,'Output monitoring aids')
+bullets(b,['<b>Timecode:</b> TC HH:MM:SS:FF, or a semicolon for drop-frame. Dashes mean the editor supplied no valid timecode.','<b>L/R meters:</b> outgoing stereo levels, peak hold and clip indication.','<b>Positions:</b> six choices each for timecode and meters, with independent placement. The timecode background is translucent.','<b>Title safe 80% / Action safe 90%:</b> optional white/yellow guides. These are app guide percentages, not a broadcaster-compliance guarantee.'])
+p(b,'Overlays affect the outgoing picture on compatible outputs, not the editor project/source file. Output timecode is for editors; meters/guides also work with movie playback. About and Quit are in the app menu; Help contains setup, diagnostics and driver actions.')
 
-b=page('Troubleshooting and limits')
-table(b,['Problem','What to check'],[
-['Installer fails','Quit both editors and Shuttle Camera, close capture previews, check SIP status, and use the current startup volume. Installer → Window → Installer Log shows the precise reason.'],
-['Camera missing','Use Help → Driver Setup → Enable Camera. Approve Camera Extensions in System Settings, then reopen Shuttle Camera and the recording app.'],
-['No capture sound','Use the separate Stereo Audio microphone, Analog RCA for VCR red/white cables, and check app microphone permission.'],
-['Ready never appears','Close capture previews, check USB 3 cable/adapter and power, reconnect the Shuttle after stopping clients, then retry. Read Help → Diagnostics.'],
-['Premiere device missing','Restart Premiere; confirm the Shuttle transmitter exists in the Plug-ins path on page 9. Do not select Blackmagic Playback as a substitute for this plug-in.'],
-['Picture, no HDMI sound','Check Premiere Audio Hardware or Final Cut’s Use HDMI audio route. TV speakers must be enabled; HDMI-to-DVI connections do not provide TV audio.'],
-['Purple blacks / wrong colours','On the tested Dell P2213t with HDMI-to-DVI, set its Input Color Format to YPbPr. RGB selection in this app is not implemented. Direct HDMI to the tested TV worked.'],
-['Mac sound missing afterwards','Click Restore audio or choose normal speakers in Sound settings. Also undo any explicit HDMI output selection inside Premiere.'],
-['Editor freezes / viewer stops','Disable external output, then stop Shuttle output. Relaunch only after saving work. Report the format, editor version and Diagnostics log; do not keep toggling output during a hung session.']])
-h(b,'Current limitations')
-p(b,'This build is Apple silicon only. Capture is standard-definition; S-Video/composite VHS capture is the main tested workflow. Listed Component/HDMI capture options do not imply HD capture support. There is no DaVinci Resolve output integration, selectable RGB HDMI mode, simultaneous capture/playback or qualified 1080p50/60 output.')
-p(b,'Testing covered the listed PAL/NTSC/1080 modes on one Mac Studio setup. It is not proof of compatibility with every USB controller, display, movie codec, editor update or tape. Very long sessions, exact measured physical A/V latency and fresh installs on other Macs have not been comprehensively qualified.')
-p(b,'For a useful report, include the app/macOS/editor versions, source and HDMI format, connection type, whether the camera is in use, and relevant Diagnostics/Installer Log lines. Review logs for private file names before sharing them.')
+b=page('Troubleshooting')
+table(b,['Symptom','Check'],[
+['Installer error','Quit editors/camera apps and stop output. Confirm the installer heading/version; use the startup volume. Installer Log gives the actual failure.'],
+['Camera missing','Enable Camera in Help > Driver Setup and approve Camera Extensions; reopen the recording app.'],
+['No capture audio','Choose the separate Stereo Audio microphone, Analog RCA input and microphone permission.'],
+['Screen permission loops','Quit Shuttle Camera. Remove its old Screen & System Audio Recording entry, add /Applications/Shuttle Camera.app again, enable and reopen. Ad-hoc updates can leave an old permission signature.'],
+['SD screen absent in Displays','Select Extended display and Start. Use current software; PAL/NTSC now start at 1024x768. Test pattern does not create a desktop.'],
+['Only part of a desktop shows','Stop, select Stretch, start again. Stretch follows live desktop size changes; restart Fit/Fill after a mode change.'],
+['Editor output choppy','Match timeline/output cadence; compare A/V Output off/on. Check rendering/media load and collect diagnostics during the affected session.'],
+['Purple blacks on DVI monitor','The tested Dell P2213t needs YPbPr for HDMI-to-DVI. Selectable RGB output is not implemented.'],
+['Mac sound missing afterwards','Restore audio in Shuttle Camera or Sound settings; restore explicit Premiere output inside Premiere.'],
+['Premiere device absent','Restart Premiere and confirm the Transmit bundle is in the legacy Plug-ins path listed on the next page.']])
+p(b,'For a report, include app/macOS/editor versions, project/source frame rate, output format, connection and relevant diagnostics. Review logs for personal filenames. Every codec, 4K timeline, analogue combination and long-session latency has not been comprehensively qualified. There is no Resolve output integration or simultaneous capture/playback.')
 
 b=page('Remove it and restore security')
-h(b,'Remove the development components')
-steps(b,['Save your work. Disable editor external output, quit the editors, stop Shuttle output and restore normal audio. Close recording/camera previews.','In Shuttle Camera, use <b>Help → Driver Setup → Disable Camera</b>. In System Settings → Camera Extensions, turn off both Shuttle extensions.','Move <b>Shuttle Camera.app</b> from Applications to the Bin using Finder. Allow macOS to remove its bundled extensions if prompted. Do not manually delete files from /Library/SystemExtensions.','In Finder → Go → Go to Folder, visit the HAL path below and move only <b>Shuttle Audio.driver</b> to the Bin. Visit the Premiere path and move only <b>Shuttle Transmit.bundle</b> to the Bin. Administrator approval may be required.','Restart to unload audio and finish any pending extension removal. Check that other audio devices work normally. Do not use systemextensionsctl reset; it would affect unrelated extensions.'])
-h(b,'Turn extension developer mode off in normal macOS')
+steps(b,['Save work. Disable editor external output, stop playback/capture, restore sound and quit clients.','Use Help > Driver Setup > Disable Camera. Turn off both Shuttle Camera Extensions in System Settings.','Move Shuttle Camera.app from Applications to the Bin. Allow macOS to remove bundled extensions if prompted. Do not manually delete /Library/SystemExtensions.','In Finder, move only this project\'s audio driver and Premiere bundle at the paths below to the Bin. Administrator approval may be required. Restart to unload audio and finish pending removal.'])
+h(b,'Installed components')
+bullets(b,['App: <font name="Courier">/Applications/Shuttle Camera.app</font>','Audio: <font name="Courier">/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver</font>','Premiere: <font name="Courier">/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle</font>','Source, status and backups: <font name="Courier">/Library/Application Support/Shuttle Camera</font>. User settings/media are under the user\'s Library/Application Support/Shuttle Camera.'])
+h(b,'Restore the development security settings')
+p(b,'If developer mode was enabled, turn it off in normal Terminal:')
 code(b,'sudo systemextensionsctl developer off')
-h(b,'Turn SIP back on in Recovery')
-p(b,'Boot to Recovery as on page 2, choose Utilities → Terminal, run the command below, then restart normally. Verify with csrutil status in the desktop Terminal. If you separately changed Startup Security policies, consult Apple’s Recovery guidance to restore the appropriate policy for your startup system. '+link('sip')+'.')
+p(b,'In Recovery Terminal, reenable SIP and restart. Verify with csrutil status in normal macOS. '+link('sip')+'.')
 code(b,'csrutil enable')
-p(b,'The ad-hoc development extensions may stop working after restoring SIP; do not treat this as a supported way to keep using this build. Retain backups until you have checked your files and normal audio. Accessing installer backups may require administrator rights.')
-h(b,'Installed files and source')
-bullets(b,['App: <font name="Courier">/Applications/Shuttle Camera.app</font>','Audio: <font name="Courier">/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver</font>','Premiere: <font name="Courier">/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle</font>','Source archive, licences, installation status and backups: <font name="Courier">/Library/Application Support/Shuttle Camera/</font>'])
-p(b,'Project source includes GPL/LGPL components; consult COPYING and component licences in Source.zip. Adobe’s SDK must be obtained separately for rebuilding the Premiere adapter. The new original SVHS project artwork was generated from a text-only prompt without the previous icon as an input; it is included under the project GPL-2.0-or-later terms. See ICON-NOTE.md in the source resources.')
+p(b,'The ad-hoc extensions may stop working with SIP restored; this runtime configuration is not qualified. Do not reset all system extensions, because that affects unrelated software. Keep backups until normal audio and files are checked.')
 
 styles=getSampleStyleSheet()
 font_regular=Path('/System/Library/Fonts/Supplemental/Arial.ttf')
@@ -167,10 +183,10 @@ def pdf_blocks(blocks):
    f,caption=v;im=PILImage.open(OUT/'images'/f);w=380;result.append(Image(str(OUT/'images'/f),width=w,height=w*im.height/im.width));result.append(para(caption,'GuideCaption'))
   elif kind=='table':
    headers,rows=v;data=[[para('<b>'+html.escape(str(x))+'</b>','GuideCell') for x in headers]]+[[para(html.escape(str(x)),'GuideCell') for x in r] for r in rows]
-   widths=[135,372] if len(headers)==2 else None
-   if headers[0]=='Page':widths=[45,462]
+   widths=[135, 372] if len(headers)==2 else None
+   if headers[0]=='Page':widths=[45, 462]
    t=Table(data,colWidths=widths,hAlign='LEFT',repeatRows=1)
-   t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#e9eff5')),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),7),('RIGHTPADDING',(0,0),(-1,-1),7),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),('LINEBELOW',(0,0),(-1,-1),0.3,colors.HexColor('#d7dfe6'))]));result.extend([t,Spacer(1,8)])
+   t.setStyle(TableStyle([('BACKGROUND',(0, 0),(-1, 0),colors.HexColor('#e9eff5')),('VALIGN',(0, 0),(-1,-1),'TOP'),('LEFTPADDING',(0, 0),(-1,-1), 7),('RIGHTPADDING',(0, 0),(-1,-1), 7),('TOPPADDING',(0, 0),(-1,-1), 5),('BOTTOMPADDING',(0, 0),(-1,-1), 5),('LINEBELOW',(0, 0),(-1,-1), 0.3,colors.HexColor('#d7dfe6'))]));result.extend([t,Spacer(1, 8)])
  return result
 
 story=[]
@@ -178,8 +194,8 @@ for i,page_data in enumerate(PAGES):
  if i:story.append(PageBreak())
  story.append(para(page_data['title'],'GuideTitle'));story.extend(pdf_blocks(page_data['blocks']))
 def furniture(c,doc):
- c.saveState();c.setFillColor(colors.HexColor('#687b8b'));c.setFont(font,8);c.drawString(44,817,'SHUTTLE CAMERA   /   0.1.31 DEVELOPMENT BUILD');c.setStrokeColor(colors.HexColor('#d8e1e8'));c.line(44,810,551,810);c.drawString(44,25,'Installation & user guide · 18 October 2026');c.drawRightString(551,25,str(doc.page));c.restoreState()
-SimpleDocTemplate(str(OUT/'Read Me.pdf'),pagesize=A4,rightMargin=44,leftMargin=44,topMargin=53,bottomMargin=43,title='Shuttle Camera 0.1.31 — Read Me',author='Shuttle Camera Project').build(story,onFirstPage=furniture,onLaterPages=furniture)
+ c.saveState();c.setFillColor(colors.HexColor('#687b8b'));c.setFont(font, 8);c.drawString(44, 817,'SHUTTLE CAMERA   /   0.1.39 DEVELOPMENT BUILD');c.setStrokeColor(colors.HexColor('#d8e1e8'));c.line(44, 810, 551, 810);c.drawString(44, 25,'Installation & user guide · 18 October 2026');c.drawRightString(551, 25,str(doc.page));c.restoreState()
+SimpleDocTemplate(str(OUT/'Read Me.pdf'),pagesize=A4,rightMargin=44,leftMargin=44,topMargin=53,bottomMargin=43,title='Shuttle Camera 0.1.39 — Read Me',author='Shuttle Camera Project').build(story,onFirstPage=furniture,onLaterPages=furniture)
 
 # Single-file HTML embeds screenshots so it remains usable when copied alone.
 def html_block(kind,v):
@@ -194,13 +210,13 @@ def html_block(kind,v):
   headers,rows=v;return '<table><thead><tr>'+''.join('<th>'+html.escape(str(x))+'</th>' for x in headers)+'</tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+html.escape(str(x))+'</td>' for x in row)+'</tr>' for row in rows)+'</tbody></table>'
  return ''
 css='''body{margin:0;background:#edf1f5;color:#243341;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:880px;margin:35px auto;background:white;padding:48px;border-radius:14px}h1{font-size:32px;line-height:1.2;color:#112a41}h2{font-size:21px;margin:26px 0 10px}a{color:#075fa9}section{padding-top:16px;margin-bottom:44px;border-top:1px solid #d9e2ea}aside{padding:18px;background:#fff2d6;border-left:4px solid #bf8023;border-radius:5px}pre{background:#edf2f6;padding:16px;overflow:auto;border-radius:5px}code{font-size:14px}li{margin-bottom:10px}table{width:100%;border-collapse:collapse;font-size:14px;margin:15px 0}th,td{text-align:left;padding:9px;border-bottom:1px solid #d8e1e8;vertical-align:top}th{background:#e9eff5}figure{margin:18px 0}img{display:block;max-width:100%;height:auto;border:1px solid #e0e5eb;border-radius:8px}figcaption{font-size:13px;color:#667585;margin-top:8px}font{overflow-wrap:anywhere}nav a{display:block;margin:5px 0}@media(max-width:650px){main{padding:22px;margin:0;border-radius:0}h1{font-size:27px}}@media print{body{background:white}main{padding:0;margin:0}section{break-before:page}a{color:inherit}}'''
-contents='<h1>Shuttle Camera 0.1.31</h1><p>Illustrated installation &amp; user guide · 18 October 2026</p><nav>'+''.join(f'<a href="#page-{i+1}">{i+1}. {p["title"]}</a>' for i,p in enumerate(PAGES))+'</nav>'
+contents='<h1>Shuttle Camera 0.1.39</h1><p>Illustrated installation &amp; user guide · 18 October 2026</p><nav>'+''.join(f'<a href="#page-{i+1}">{i+1}. {p["title"]}</a>' for i,p in enumerate(PAGES))+'</nav>'
 for i,pg in enumerate(PAGES):contents+=f'<section id="page-{i+1}"><h1>{html.escape(pg["title"])}</h1>'+''.join(html_block(k,v) for k,v in pg['blocks'])+'</section>'
-(OUT/'Read Me.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Shuttle Camera 0.1.31 — Read Me</title><style>'+css+'</style><main>'+contents+'</main></html>')
+(OUT/'Read Me.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Shuttle Camera 0.1.39 — Read Me</title><style>'+css+'</style><main>'+contents+'</main></html>')
 
 def md(t):
  t=re.sub(r'<a href="([^"]+)">([^<]+)</a>',r'[\2](\1)',t);t=t.replace('<b>','**').replace('</b>','**');t=re.sub(r'<font[^>]*>','`',t).replace('</font>','`');return html.unescape(re.sub(r'<[^>]+>','',t))
-lines=['# Shuttle Camera 0.1.31 — Read Me','', 'Installation & user guide · 18 October 2026','']
+lines=['# Shuttle Camera 0.1.39 — Read Me','', 'Installation & user guide · 18 October 2026','']
 for pg in PAGES:
  lines+=['## '+pg['title'],'']
  for k,v in pg['blocks']:

@@ -11,3 +11,7 @@ Retain all upstream copyright and licence notices when modifying or distributing
 
 
 Apple, Adobe, Final Cut Pro, Premiere Pro, Blackmagic Design and Intensity Shuttle are referenced to identify compatibility. No endorsement is claimed.
+
+## Experimental virtual display interface reference
+
+`unified/src/output/VirtualDisplayMain.mm` is an original wrapper using runtime Objective-C interface facts documented in Chromium’s `ui/display/mac/test/virtual_display_util_mac.mm`: https://chromium.googlesource.com/chromium/src/+/HEAD/ui/display/mac/test/virtual_display_util_mac.mm . No Chromium implementation is bundled. CoreGraphics virtual-display selectors are undocumented by Apple and may change.

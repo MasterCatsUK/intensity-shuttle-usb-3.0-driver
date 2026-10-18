@@ -40,7 +40,7 @@ check_bundle() {
         [[ $old_version =~ ^[0-9]+$ && $old_version -le $limit ]] || fail "A newer or unrecognized build is already installed at $path."
     fi
 }
-check_bundle "$app" local.shuttle.camera 31
+check_bundle "$app" local.shuttle.camera 39
 check_bundle "$audio" local.shuttle.audio 3
 check_bundle "$output" local.shuttle.output 1
 check_bundle "$premiere" local.shuttle.premiere.transmit 1

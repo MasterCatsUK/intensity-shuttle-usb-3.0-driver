@@ -5,6 +5,7 @@
 #define main ShuttleOutputHostMain
 #include "output/OutputHost.mm"
 #undef main
+#include "IdleHost.mm"
 @interface NavigationButton : NSControl
 @property(copy) NSString* title;
 @property(nonatomic) BOOL selected;
@@ -28,11 +29,15 @@
 @end
 @interface CombinedHost : NSObject <NSApplicationDelegate,NSWindowDelegate>
 @property Host* capture;
+@property IdleHost* idle;
 @property OutputHost* output;
 @property NSWindow* window;
 @property NSTabView* tabs;
 @property NavigationButton* captureButton;
 @property NavigationButton* outputButton;
+@property NavigationButton* pictureButton;
+@property NavigationButton* idleButton;
+@property NSInteger renderTab;
 @property NSString* renderPath;
 @property BOOL renderOutput;
 @property NSWindow* diagnosticsWindow;
@@ -46,8 +51,11 @@
     self.window.title=@"Shuttle Camera";self.window.delegate=self;
     self.window.contentView=[[SettingsCanvas alloc] initWithFrame:NSMakeRect(0,0,690,590)];
     self.tabs=[[NSTabView alloc] initWithFrame:NSMakeRect(12,12,666,516)];self.tabs.tabViewType=NSNoTabsNoBorder;
-    self.captureButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(168,542,150,30)];self.captureButton.title=@"Capture";self.captureButton.target=self;self.captureButton.action=@selector(showCapture:);
-    self.outputButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(328,542,190,30)];self.outputButton.title=@"Video Output";self.outputButton.target=self;self.outputButton.action=@selector(showOutput:);
+    self.captureButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(48,542,138,30)];self.captureButton.title=@"Capture";self.captureButton.target=self;self.captureButton.action=@selector(showCapture:);
+    self.outputButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(348,542,138,30)];self.outputButton.title=@"Video Output";self.outputButton.target=self;self.outputButton.action=@selector(showOutput:);
+    self.pictureButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(198,542,138,30)];self.pictureButton.title=@"Picture";self.pictureButton.target=self;self.pictureButton.action=@selector(showPicture:);
+    self.idleButton=[[NavigationButton alloc] initWithFrame:NSMakeRect(498,542,138,30)];self.idleButton.title=@"Idle Screen";self.idleButton.target=self;self.idleButton.action=@selector(showIdle:);
+    self.idle=[IdleHost new];self.idle.window=self.window;
     auto* captureTab=[[NSTabViewItem alloc] initWithIdentifier:@"capture"];captureTab.label=@"Capture";
     auto* outputTab=[[NSTabViewItem alloc] initWithIdentifier:@"output"];outputTab.label=@"Video Output";
     auto* captureContainer=[[SettingsCanvas alloc] initWithFrame:NSMakeRect(0,0,650,500)];
@@ -57,11 +65,15 @@
     captureView.autoresizingMask=NSViewMinYMargin;outputView.autoresizingMask=NSViewMinYMargin;
     [captureContainer addSubview:captureView];[outputContainer addSubview:outputView];captureTab.view=captureContainer;outputTab.view=outputContainer;
     [self.tabs addTabViewItem:captureTab];[self.tabs addTabViewItem:outputTab];[self.window.contentView addSubview:self.tabs];
+    auto pictureTab=[[NSTabViewItem alloc] initWithIdentifier:@"picture"];pictureTab.label=@"Picture";pictureTab.view=self.capture.pictureView;
+    auto idleTab=[[NSTabViewItem alloc] initWithIdentifier:@"idle"];idleTab.label=@"Idle Screen";idleTab.view=self.idle.view;
+    [self.tabs addTabViewItem:pictureTab];[self.tabs addTabViewItem:idleTab];
+    [self.window.contentView addSubview:self.pictureButton];[self.window.contentView addSubview:self.idleButton];
     [self.window.contentView addSubview:self.captureButton];[self.window.contentView addSubview:self.outputButton];
     // All handlers present sheets and activation messages in this one window.
     self.capture.window=self.window;self.output.window=self.window;
     [self buildMenu];
-    if(self.renderOutput)[self showOutput:nil];else [self showCapture:nil];
+    if(self.renderTab==2)[self showPicture:nil];else if(self.renderTab==3)[self showIdle:nil];else if(self.renderOutput)[self showOutput:nil];else [self showCapture:nil];
     [self.window center];[self.window makeKeyAndOrderFront:nil];
     if(self.renderPath){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,300*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
         NSView* v=self.window.contentView;[v layoutSubtreeIfNeeded];auto* rep=[v bitmapImageRepForCachingDisplayInRect:v.bounds];[v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
@@ -93,7 +105,7 @@
     NSApp.mainMenu=main;NSApp.helpMenu=help.submenu;
 }
 - (void)showAbout:(id)sender {
-    NSString* version=[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]?:@"0.1.31";
+    NSString* version=[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]?:@"0.1.39";
     NSAttributedString* credits=[[NSAttributedString alloc] initWithString:@"Capture, playback and HDMI output\nfor the Intensity Shuttle USB 3." attributes:@{NSForegroundColorAttributeName:NSColor.labelColor}];
     [NSApp orderFrontStandardAboutPanelWithOptions:@{NSAboutPanelOptionApplicationName:@"Shuttle Camera",NSAboutPanelOptionApplicationVersion:version,NSAboutPanelOptionCredits:credits}];
 }
@@ -107,8 +119,11 @@
     if(!self.diagnosticsWindow){self.diagnosticsWindow=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,650,300) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];self.diagnosticsWindow.title=@"Shuttle Diagnostics";self.diagnosticsWindow.releasedWhenClosed=NO;self.diagnosticsWindow.contentView=self.output.diagnosticsScroll;[self.diagnosticsWindow center];}
     [self.diagnosticsWindow makeKeyAndOrderFront:nil];
 }
-- (void)showCapture:(id)sender{[self.tabs selectTabViewItemAtIndex:0];self.captureButton.selected=YES;self.outputButton.selected=NO;}
-- (void)showOutput:(id)sender{[self.tabs selectTabViewItemAtIndex:1];self.outputButton.selected=YES;self.captureButton.selected=NO;}
+- (void)selectPanel:(NSUInteger)index { [self.tabs selectTabViewItemAtIndex:index];self.captureButton.selected=index==0;self.outputButton.selected=index==1;self.pictureButton.selected=index==2;self.idleButton.selected=index==3; }
+- (void)showCapture:(id)sender{[self selectPanel:0];}
+- (void)showOutput:(id)sender{[self selectPanel:1];}
+- (void)showPicture:(id)sender{[self.capture refreshPictureCapabilities];[self selectPanel:2];}
+- (void)showIdle:(id)sender{[self selectPanel:3];}
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)app{return YES;}
 - (void)applicationWillTerminate:(NSNotification*)note{[self.output applicationWillTerminate:note];}
 @end
@@ -116,6 +131,6 @@ int main(int argc,char**argv){@autoreleasepool{
     if(argc==2&&!strcmp(argv[1],"--activate-output")){NSApplication* app=NSApplication.sharedApplication;app.activationPolicy=NSApplicationActivationPolicyProhibited;OutputHost* host=[OutputHost new];host.activationOnly=YES;app.delegate=host;[app run];return 0;}
     if((argc==2&&(!strcmp(argv[1],"--get-settings")||!strcmp(argv[1],"--activate")||!strcmp(argv[1],"--deactivate")))||(argc==3&&!strcmp(argv[1],"--apply-settings")))return ShuttleCaptureHostMain(argc,argv);
     NSApplication* app=NSApplication.sharedApplication;app.activationPolicy=NSApplicationActivationPolicyRegular;CombinedHost* host=[CombinedHost new];
-    if(argc==3&&(!strcmp(argv[1],"--render-capture")||!strcmp(argv[1],"--render-output"))){host.renderPath=@(argv[2]);host.renderOutput=!strcmp(argv[1],"--render-output");app.activationPolicy=NSApplicationActivationPolicyAccessory;app.appearance=[NSAppearance appearanceNamed:NSAppearanceNameAqua];}
+    if(argc==3&&(!strcmp(argv[1],"--render-capture")||!strcmp(argv[1],"--render-output")||!strcmp(argv[1],"--render-picture")||!strcmp(argv[1],"--render-idle"))){host.renderPath=@(argv[2]);host.renderOutput=!strcmp(argv[1],"--render-output");host.renderTab=!strcmp(argv[1],"--render-picture")?2:!strcmp(argv[1],"--render-idle")?3:0;app.activationPolicy=NSApplicationActivationPolicyAccessory;app.appearance=[NSAppearance appearanceNamed:NSAppearanceNameAqua];}
     app.delegate=host;[app run];
 }return 0;}

@@ -20,8 +20,9 @@ python3 - "$app" "$audio" <<'PY'
 import plistlib,sys
 from pathlib import Path
 app=Path(sys.argv[1]);extensions=app/'Contents/Library/SystemExtensions'
-for root,identifier,version in [(app,'local.shuttle.camera','31'),(Path(sys.argv[2]),'local.shuttle.audio','3'),
-    (extensions/'local.shuttle.camera.extension.systemextension','local.shuttle.camera.extension','15'),
+assert (app/'Contents/MacOS/ShuttleDisplay').is_file(), 'Missing extended-display helper'
+for root,identifier,version in [(app,'local.shuttle.camera','39'),(Path(sys.argv[2]),'local.shuttle.audio','3'),
+    (extensions/'local.shuttle.camera.extension.systemextension','local.shuttle.camera.extension','17'),
     (extensions/'local.shuttle.output.extension.systemextension','local.shuttle.output.extension','12')]:
     p=plistlib.loads((root/'Contents/Info.plist').read_bytes())
     assert (p['CFBundleIdentifier'],p['CFBundleVersion'])==(identifier,version), f'Unexpected payload version: {root}'
@@ -64,7 +65,7 @@ def update(items):
 update(items);p.write_bytes(plistlib.dumps(items))
 Path(sys.argv[2]).write_bytes(plistlib.dumps({'os':['27.0'],'arch':['arm64']}))
 PY
-/usr/bin/pkgbuild --identifier local.shuttle.capture.installer --version 0.1.31 \
+/usr/bin/pkgbuild --identifier local.shuttle.capture.installer --version 0.1.39 \
     --root "$build/payload" --install-location / --component-plist "$build/components.plist" \
     --scripts "$build/scripts" --ownership recommended "$build/packages/ShuttleCapture.pkg"
 /usr/bin/productbuild --synthesize --product "$build/requirements.plist" --package "$build/packages/ShuttleCapture.pkg" "$build/Distribution"
@@ -83,9 +84,9 @@ for reference in root.findall('pkg-ref'):
 E.indent(tree,space='  ');tree.write(p,encoding='utf-8',xml_declaration=True)
 PY
 /usr/bin/productbuild --distribution "$build/Distribution" --resources "$build/resources" \
-    --package-path "$build/packages" "$build/Shuttle-Capture-0.1.31.pkg"
+    --package-path "$build/packages" "$build/Shuttle-Capture-0.1.39.pkg"
 # Validate the actual archive without invoking its installation scripts.
-/usr/sbin/pkgutil --expand-full "$build/Shuttle-Capture-0.1.31.pkg" "$build/expanded"
+/usr/sbin/pkgutil --expand-full "$build/Shuttle-Capture-0.1.39.pkg" "$build/expanded"
 expanded="$build/expanded/ShuttleCapture.pkg/Payload"
 /usr/bin/codesign --verify --deep --strict "$expanded/Applications/Shuttle Camera.app"
 /usr/bin/codesign --verify --deep --strict "$expanded/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver"
@@ -102,14 +103,14 @@ assert dist.find('domains').get('enable_localSystem')=='true'
 assert dist.find('options').get('allow-external-scripts')!='yes'
 source=root/'ShuttleCapture.pkg/Payload/Library/Application Support/Shuttle Camera/Source.zip'
 with zipfile.ZipFile(source) as z:
-    for name in ['src/CameraExtension.mm','audio/src/AudioDriver.cpp','installer/src/CaptureCheck.mm','installer/build.sh','unified/src/output/OutputPacket.hpp','unified/src/output/MovieSource.mm','unified/build.sh','vendor/libusb-1.0.29.tar.bz2','COPYING']:
+    for name in ['src/CameraExtension.mm','audio/src/AudioDriver.cpp','installer/src/CaptureCheck.mm','installer/build.sh','unified/src/output/OutputPacket.hpp','unified/src/output/MovieSource.mm','unified/src/output/FrameSizing.hpp','unified/src/output/VirtualDisplayMain.mm','unified/src/ExtendedDisplay.mm','unified/build.sh','vendor/libusb-1.0.29.tar.bz2','COPYING']:
         assert 'shuttle-camera-development/'+name in z.namelist(),name
 print('PASS: exact unified camera/audio payloads, valid bundle signatures, ARM64/startup-volume restrictions, embedded complete source')
 PY
-package="$output_dir/Shuttle-Capture-0.1.31.pkg"
+package="$output_dir/Shuttle-Capture-0.1.39.pkg"
 if [[ -e $package ]]; then /bin/mv "$package" "$build/previous-installer.pkg"; fi
-/bin/cp "$build/Shuttle-Capture-0.1.31.pkg" "$package"
+/bin/cp "$build/Shuttle-Capture-0.1.39.pkg" "$package"
 /bin/cp "$script_root/README.md" "$output_dir/Read Me.md"
 /bin/cp "$script_root/PLAYBACK-ROADMAP.md" "$output_dir/Playback Roadmap.md"
-(cd "$output_dir"; /usr/bin/shasum -a 256 Shuttle-Capture-0.1.31.pkg > SHA256.txt)
+(cd "$output_dir"; /usr/bin/shasum -a 256 Shuttle-Capture-0.1.39.pkg > SHA256.txt)
 printf 'Built and expanded successfully: %s\nNothing was installed.\n' "$package"
