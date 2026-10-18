@@ -1,6 +1,6 @@
 <img src="unified/resources/AppIcon.png" width="128" alt="Shuttle Camera SVHS cassette icon">
 
-# Shuttle Camera
+# Intensity Shuttle USB 3.0 drive for Apple Silicon and Mac OS X Golden Gate.
 
 **Capture VHS, play movie files and monitor editing timelines through the Intensity Shuttle USB 3.0 on an Apple-silicon Mac.**
 
