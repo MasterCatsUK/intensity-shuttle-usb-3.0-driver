@@ -1,0 +1,50 @@
+#!/bin/bash
+# GPL-2.0-or-later. Verify payload, refresh Core Audio if needed, open settings.
+set -euo pipefail
+[[ $(/usr/bin/id -u) == 0 && ${3:-} == / ]] || exit 1
+app='/Applications/Shuttle Camera.app'
+output='/Applications/Shuttle Output.app'
+audio='/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver'
+support='/Library/Application Support/Shuttle Camera'
+premiere='/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle'
+state="$support/Install State"
+[[ -d $state && ! -L $support && ! -L $state ]] || exit 1
+backup=$(/bin/cat "$state/pending-backup")
+console_uid=$(/bin/cat "$state/console-uid")
+[[ $backup == "$support/Backups/"* && -d $backup && $console_uid =~ ^[0-9]+$ ]] || exit 1
+/usr/bin/codesign --verify --deep --strict "$app"
+/usr/bin/codesign --verify --deep --strict "$audio"
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist") == local.shuttle.camera ]] || exit 1
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist") == 31 ]] || exit 1
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$audio/Contents/Info.plist") == local.shuttle.audio ]] || exit 1
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$audio/Contents/Info.plist") == 3 ]] || exit 1
+/usr/bin/codesign --verify --deep --strict "$premiere"
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$premiere/Contents/Info.plist") == local.shuttle.premiere.transmit ]] || exit 1
+[[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$premiere/Contents/Info.plist") == 1 ]] || exit 1
+/usr/sbin/chown -R root:wheel "$app" "$audio" "$premiere"
+/bin/chmod -R go-w "$app" "$audio" "$premiere"
+# Retire the old standalone output app only after validating the unified app.
+if [[ -d $output && ! -L $output && $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$output/Contents/Info.plist") == local.shuttle.output ]]; then
+    /bin/mv "$output" "$backup/Retired Shuttle Output.app"
+fi
+message='Installation complete. The interface is simpler; diagnostics and driver setup are under Help. About and Quit are in the Shuttle Camera menu. Capture extension15, HDMI output extension12, audio HAL3 and the Premiere transmitter are unchanged. No driver reactivation is needed for an enabled setup.'
+# An identical audio reinstallation does not interrupt any sound devices.
+unchanged=false
+if [[ -d "$backup/Shuttle Audio.driver" ]] && /usr/bin/diff -qr "$backup/Shuttle Audio.driver" "$audio" >/dev/null 2>&1; then unchanged=true; fi
+if ! $unchanged; then
+    script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+    status=0
+    /bin/launchctl asuser "$console_uid" /usr/bin/sudo -u "#$console_uid" "$script_dir/check-capture" || status=$?
+    if [[ $status == 0 || $status == 3 ]]; then
+        if ! /bin/launchctl kickstart -k system/com.apple.audio.coreaudiod; then message="$message Restart the Mac to load the stereo audio driver."; fi
+    else
+        message="$message Capture started after the initial check, so Core Audio was not restarted. Restart the Mac after recording to load the new audio driver."
+    fi
+fi
+printf '%s\nBackup: %s\n' "$message" "$backup" > "$support/Installation Status.txt"
+/bin/chmod 644 "$support/Installation Status.txt"
+echo "$message"
+# Opening our settings app does not start USB capture or submit activation requests.
+if [[ $(/usr/bin/stat -f %u /dev/console) == "$console_uid" ]]; then
+    /bin/launchctl asuser "$console_uid" /usr/bin/sudo -u "#$console_uid" /usr/bin/open -a "$app" || echo 'Open Shuttle Camera from Applications to finish setup.'
+fi

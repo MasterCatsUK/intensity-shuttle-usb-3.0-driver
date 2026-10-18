@@ -1,0 +1,78 @@
+#!/bin/bash
+# GPL-2.0-or-later. Read-only checks precede all installation changes.
+set -euo pipefail
+fail() { echo "Shuttle Capture: $*" >&2; exit 1; }
+check_only=false
+if [[ ${1:-} == --check ]]; then check_only=true; fi
+if ! $check_only; then
+    [[ $(/usr/bin/id -u) == 0 ]] || fail 'Administrator installation is required.'
+    [[ ${3:-} == / ]] || fail 'Install on the current macOS startup volume only.'
+fi
+[[ $(/usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null) == 1 ]] || fail 'This build requires an Apple silicon Mac.'
+version=$(/usr/bin/sw_vers -productVersion)
+major=${version%%.*}
+[[ $major =~ ^[0-9]+$ && $major -ge 27 ]] || fail 'This development build requires macOS 27 or later; it was tested on 27.0.1.'
+sip=$(/usr/bin/csrutil status 2>/dev/null) || fail 'Could not read SIP status.'
+[[ $sip == *'status: disabled.'* ]] || fail 'This ad-hoc development extension requires the existing SIP-disabled development setup. See Read Me. The installer does not change SIP.'
+app='/Applications/Shuttle Camera.app'
+output='/Applications/Shuttle Output.app'
+audio='/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver'
+support='/Library/Application Support/Shuttle Camera'
+premiere='/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle'
+for path in '/Library/Application Support/Adobe' '/Library/Application Support/Adobe/Common' '/Library/Application Support/Adobe/Common/Plug-ins' '/Library/Application Support/Adobe/Common/Plug-ins/7.0' '/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore' '/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle' "$premiere" /Applications /Library '/Library/Audio' '/Library/Audio/Plug-Ins' '/Library/Audio/Plug-Ins/HAL' '/Library/Application Support' "$app" "$audio" "$output" "$support" "$support/Backups" "$support/Install State" "$support/Install State/pending-backup" "$support/Install State/console-uid" "$support/Installation Status.txt"; do
+    [[ ! -L "$path" ]] || fail "Refusing a symbolic link at $path"
+done
+# Persistent state is trusted only inside root-owned, non-writable directories.
+for path in "$support" "$support/Backups" "$support/Install State"; do
+    if [[ -e $path ]]; then
+        [[ -d $path && $(/usr/bin/stat -f %u "$path") == 0 ]] || fail "Installer state directory is not root-owned: $path"
+        mode=$(/usr/bin/stat -f %Lp "$path")
+        (( (8#$mode & 8#022) == 0 )) || fail "Installer state directory permits other users to write: $path"
+    fi
+done
+check_bundle() {
+    local path=$1 expected=$2 limit=$3 actual old_version
+    if [[ -e $path ]]; then
+        [[ -d $path && ! -L "$path/Contents" && ! -L "$path/Contents/Info.plist" ]] || fail "Unexpected bundle at $path"
+        actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$path/Contents/Info.plist" 2>/dev/null) || fail "Cannot identify $path"
+        [[ $actual == "$expected" ]] || fail "Another product occupies $path; nothing has been replaced."
+        old_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$path/Contents/Info.plist" 2>/dev/null) || fail "Cannot read version of $path"
+        [[ $old_version =~ ^[0-9]+$ && $old_version -le $limit ]] || fail "A newer or unrecognized build is already installed at $path."
+    fi
+}
+check_bundle "$app" local.shuttle.camera 31
+check_bundle "$audio" local.shuttle.audio 3
+check_bundle "$output" local.shuttle.output 1
+check_bundle "$premiere" local.shuttle.premiere.transmit 1
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+console_uid=$(/usr/bin/stat -f %u /dev/console)
+[[ $console_uid =~ ^[0-9]+$ && $console_uid -ge 500 ]] || fail 'Sign in to a regular Mac user account before installing.'
+status=0
+if [[ $(/usr/bin/id -u) == 0 ]]; then
+    /bin/launchctl asuser "$console_uid" /usr/bin/sudo -u "#$console_uid" "$script_dir/check-capture" || status=$?
+else
+    "$script_dir/check-capture" || status=$?
+fi
+case $status in
+    0|3) ;;
+    10) fail 'Capture is running. Stop recording and close every Shuttle camera window before installing. Your capture has not been stopped.' ;;
+    *) fail 'Cannot confirm that Shuttle capture is idle. Close camera windows and try again.' ;;
+esac
+if /usr/bin/pgrep -x ShuttleCamera >/dev/null; then fail 'Quit the Shuttle Camera settings app before installing.'; fi
+if /usr/bin/pgrep -x ShuttleOutput >/dev/null || /usr/bin/pgrep -x ShuttlePlayback >/dev/null; then fail 'Stop output and quit Shuttle Output before installing.'; fi
+if /usr/bin/pgrep -x 'Final Cut Pro' >/dev/null; then fail 'Quit Final Cut Pro before installing the Final Cut output update.'; fi
+if /bin/ps -axo comm= | /usr/bin/awk '/\/Adobe Premiere Pro.*[.]app\/Contents\/MacOS\/Adobe Premiere Pro( [0-9]{4})?$/ {found=1} END {exit !found}'; then fail 'Quit Adobe Premiere Pro before installing the output plug-in.'; fi
+if $check_only; then echo 'Shuttle Capture preflight passed; no installation changes made.'; exit 0; fi
+umask 077
+/bin/mkdir -p "$support/Backups" "$support/Install State"
+/usr/sbin/chown root:wheel "$support" "$support/Backups" "$support/Install State"
+/bin/chmod 755 "$support"
+/bin/chmod 700 "$support/Backups" "$support/Install State"
+backup=$(/usr/bin/mktemp -d "$support/Backups/install-$(/bin/date +%Y%m%d-%H%M%S).XXXXXX")
+if [[ -d $app ]]; then /usr/bin/ditto "$app" "$backup/Shuttle Camera.app"; fi
+if [[ -d $output ]]; then /usr/bin/ditto "$output" "$backup/Shuttle Output.app"; fi
+if [[ -d $audio ]]; then /usr/bin/ditto "$audio" "$backup/Shuttle Audio.driver"; fi
+if [[ -d $premiere ]]; then /usr/bin/ditto "$premiere" "$backup/Shuttle Transmit.bundle"; fi
+printf '%s\n' "$backup" > "$support/Install State/pending-backup"
+printf '%s\n' "$console_uid" > "$support/Install State/console-uid"
+echo "Existing Shuttle bundles backed up to: $backup"

@@ -1,0 +1,10 @@
+build/
+**/build/
+*.o
+*.log
+.DS_Store
+__pycache__/
+*.pkg
+*.zip
+**/AppIcon-original.png
+**/AppIcon-v30.png
