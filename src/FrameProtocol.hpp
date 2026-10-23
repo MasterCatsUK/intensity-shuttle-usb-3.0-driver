@@ -57,4 +57,14 @@ inline std::vector<uint8_t> fieldImage(const uint8_t *data,
     }
     return out;
 }
+// Preserve the two captured instants as alternating rows, without bob interpolation.
+// Source field zero is the first temporal field used by the existing capture path.
+inline std::vector<uint8_t> weaveImage(const uint8_t *data,const bmusb::VideoFormat &v,bool bottomFirst) {
+    std::vector<uint8_t> out(Stride*v.height);
+    for(unsigned field=0;field<2;++field)for(unsigned row=0;row<v.height/2;++row){
+        size_t source=v.second_field_start==1?v.extra_lines_top+2*row+field:(field?v.second_field_start:v.extra_lines_top)+row;
+        std::memcpy(out.data()+(2*row+(field^(bottomFirst?1:0)))*Stride,data+source*Stride,Stride);
+    }
+    return out;
+}
 } // namespace shuttle

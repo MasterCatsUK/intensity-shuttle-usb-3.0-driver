@@ -5,11 +5,13 @@
 #include "Timecode.hpp"
 #include "AudioMeters.hpp"
 #include "SafeZones.hpp"
+#include "Scopes.hpp"
 namespace shuttle_output_audio {
 static std::atomic<bool> timecodeOverlayEnabled{false};
 static std::atomic<unsigned> timecodeOverlayPosition{5};
 static std::atomic<bool> audioMetersEnabled{false};
 static std::atomic<unsigned> audioMetersPosition{2};
+static std::atomic<unsigned> monitorView{0};
 static std::atomic<bool> titleSafeEnabled{false},actionSafeEnabled{false};
 inline int readAudioOffsetPreference(CFStringRef domain=CFSTR("local.shuttle.camera")){
     CFPreferencesAppSynchronize(domain);
@@ -30,7 +32,16 @@ inline int readOutputPreferences(CFStringRef domain){
     audioMetersPosition.store(savedMeterPosition(exists?position:0));
     enabled=CFPreferencesGetAppBooleanValue(CFSTR("ShowHDMITitleSafe"),domain,&exists);titleSafeEnabled.store(exists&&enabled);
     enabled=CFPreferencesGetAppBooleanValue(CFSTR("ShowHDMIActionSafe"),domain,&exists);actionSafeEnabled.store(exists&&enabled);
+    long view=CFPreferencesGetAppIntegerValue(CFSTR("HDMIOutputView"),domain,&exists);monitorView.store(unsigned(shuttle_scopes::validView(exists?view:0)));
     return offset;
+}
+inline void readVirtualMonitorPreferences(CFStringRef domain=CFSTR("local.shuttle.camera")) {
+    readOutputPreferences(domain);Boolean exists=false;
+    auto flag=[&](CFStringRef key,std::atomic<bool>& setting){bool value=CFPreferencesGetAppBooleanValue(key,domain,&exists);if(exists)setting=value;};
+    flag(CFSTR("ShowVirtualTimecode"),timecodeOverlayEnabled);flag(CFSTR("ShowVirtualAudioMeters"),audioMetersEnabled);flag(CFSTR("ShowVirtualTitleSafe"),titleSafeEnabled);flag(CFSTR("ShowVirtualActionSafe"),actionSafeEnabled);
+    long p=CFPreferencesGetAppIntegerValue(CFSTR("VirtualTimecodePosition"),domain,&exists);if(exists)timecodeOverlayPosition=shuttle_sink::savedTimecodePosition(p);
+    p=CFPreferencesGetAppIntegerValue(CFSTR("VirtualAudioMeterPosition"),domain,&exists);if(exists)audioMetersPosition=savedMeterPosition(p);
+    p=CFPreferencesGetAppIntegerValue(CFSTR("VirtualOutputView"),domain,&exists);monitorView=unsigned(shuttle_scopes::validView(exists?p:0));
 }
 inline int readLiveAudioOffsetPreference(){return readOutputPreferences(CFSTR("local.shuttle.camera"));}
 }

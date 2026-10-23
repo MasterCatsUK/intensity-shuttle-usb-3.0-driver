@@ -15,3 +15,7 @@ Apple, Adobe, Final Cut Pro, Premiere Pro, Blackmagic Design and Intensity Shutt
 ## Experimental virtual display interface reference
 
 `unified/src/output/VirtualDisplayMain.mm` is an original wrapper using runtime Objective-C interface facts documented in Chromium’s `ui/display/mac/test/virtual_display_util_mac.mm`: https://chromium.googlesource.com/chromium/src/+/HEAD/ui/display/mac/test/virtual_display_util_mac.mm . No Chromium implementation is bundled. CoreGraphics virtual-display selectors are undocumented by Apple and may change.
+
+## Startup media
+
+`unified/resources/Startup.m4v` is the Shuttle Video logo movie supplied by Andrew for this project and its public distribution. Only that exported movie is included; no Final Cut library, unrelated test footage or project media is distributed. The original file is retained unchanged.

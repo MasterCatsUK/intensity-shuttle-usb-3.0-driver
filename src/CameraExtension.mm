@@ -38,6 +38,7 @@ static NSError *failure(NSString *message) {
     shuttle::CaptureSettings _settings;
     shuttle::VideoProfile _profile;
     std::unique_ptr<shuttle::Scale422> _scaler;
+    std::unique_ptr<shuttle::InterlacedScale422> _interlacedScaler;
     std::shared_ptr<shuttle::PictureControls> _pictureControls;
     shuttle_audio::Packetizer _packetizer;
     std::atomic<unsigned> _detected;
@@ -67,7 +68,8 @@ static NSError *failure(NSString *message) {
     if((self=[super init])) {
         _settings=settings;_profile=settings.profile;_detected=0;
         _pictureControls=std::make_shared<shuttle::PictureControls>(settings.picture);
-        _scaler.reset(new shuttle::Scale422(_profile.height(),settings.outputWidth(),settings.outputHeight()));
+        if(settings.interlaced())_interlacedScaler.reset(new shuttle::InterlacedScale422(_profile.height(),settings.outputWidth(),settings.outputHeight(),settings.imageWidth(),settings.imageHeight()));
+        else _scaler.reset(new shuttle::Scale422(_profile.height(),settings.outputWidth(),settings.outputHeight(),settings.imageWidth(),settings.imageHeight()));
         _streaming=false;_audioFD=-1;_dropUntil=0;_syncUntil=0;
         _outputQueue=dispatch_queue_create("local.shuttle.camera.playout",DISPATCH_QUEUE_SERIAL);
         _extensions=@{
@@ -76,12 +78,16 @@ static NSError *failure(NSString *message) {
                 (__bridge NSString *)kCMFormatDescriptionKey_PixelAspectRatioVerticalSpacing:@(_settings.aspectV())},
             (__bridge NSString *)kCMFormatDescriptionExtension_YCbCrMatrix:
                 (__bridge NSString *)kCMFormatDescriptionYCbCrMatrix_ITU_R_601_4};
+        NSMutableDictionary *tags=[_extensions mutableCopy];
+        tags[(__bridge NSString*)kCVImageBufferFieldCountKey]=@(settings.interlaced()?2:1);
+        if(settings.interlaced())tags[(__bridge NSString*)kCVImageBufferFieldDetailKey]=(__bridge NSString*)(settings.bottomFirst?kCVImageBufferFieldDetailSpatialFirstLineLate:kCVImageBufferFieldDetailSpatialFirstLineEarly);
+        _extensions=[tags copy];
         CMVideoFormatDescriptionRef fmt=nullptr;
         if(CMVideoFormatDescriptionCreate(kCFAllocatorDefault,kCVPixelFormatType_422YpCbCr8,_settings.outputWidth(),_settings.outputHeight(),(__bridge CFDictionaryRef)_extensions,&fmt)) return nil;
-        CMTime duration=CMTimeMake(_profile.rateDen(),_profile.fieldNom());
+        CMTime duration=CMTimeMake(_profile.rateDen(),_settings.sampleRateNom());
         _formats=@[[CMIOExtensionStreamFormat streamFormatWithFormatDescription:fmt maxFrameDuration:duration minFrameDuration:duration validFrameDurations:nil]];
         CFRelease(fmt);
-        _stream=[CMIOExtensionStream streamWithLocalizedName:(_profile.ntsc?@"NTSC 59.94p":@"PAL 50p")
+        _stream=[CMIOExtensionStream streamWithLocalizedName:(_settings.interlaced()?[NSString stringWithFormat:@"%ui%@",_settings.outputHeight(),_profile.ntsc?@"59.94":@"50"]:(_profile.ntsc?@"NTSC 59.94p":@"PAL 50p"))
              streamID:[[NSUUID alloc] initWithUUIDString:@"C48BDE00-D3B0-43E1-B576-000000000050"]
              direction:CMIOExtensionStreamDirectionSource clockType:CMIOExtensionStreamClockTypeHostTime source:self];
     }return self;
@@ -96,7 +102,7 @@ static NSError *failure(NSString *message) {
 - (CMIOExtensionStreamProperties *)streamPropertiesForProperties:(NSSet *)properties error:(NSError **)error {
     auto *p=[CMIOExtensionStreamProperties streamPropertiesWithDictionary:@{}];
     if([properties containsObject:CMIOExtensionPropertyStreamActiveFormatIndex]) p.activeFormatIndex=@0;
-    NSDictionary *duration=CFBridgingRelease(CMTimeCopyAsDictionary(CMTimeMake(_profile.rateDen(),_profile.fieldNom()),kCFAllocatorDefault));
+    NSDictionary *duration=CFBridgingRelease(CMTimeCopyAsDictionary(CMTimeMake(_profile.rateDen(),_settings.sampleRateNom()),kCFAllocatorDefault));
     if([properties containsObject:CMIOExtensionPropertyStreamFrameDuration]) p.frameDuration=duration;
     if([properties containsObject:CMIOExtensionPropertyStreamMaxFrameDuration]) p.maxFrameDuration=duration;
     if([properties containsObject:DropProperty]) {
@@ -110,7 +116,7 @@ static NSError *failure(NSString *message) {
 - (BOOL)setStreamProperties:(CMIOExtensionStreamProperties *)p error:(NSError **)error {
     if(p.activeFormatIndex && p.activeFormatIndex.unsignedIntValue!=0) { if(error) *error=failure(@"Only the selected television standard is available.");return NO; }
     for(NSDictionary *d in @[p.frameDuration?:@{},p.maxFrameDuration?:@{}]) {
-        if(d.count && CMTimeCompare(CMTimeMakeFromDictionary((__bridge CFDictionaryRef)d),CMTimeMake(_profile.rateDen(),_profile.fieldNom()))) {
+        if(d.count && CMTimeCompare(CMTimeMakeFromDictionary((__bridge CFDictionaryRef)d),CMTimeMake(_profile.rateDen(),_settings.sampleRateNom()))) {
             if(error) *error=failure(@"Use Shuttle Camera settings to change the television standard.");return NO;
         }
     }
@@ -156,9 +162,9 @@ static NSError *failure(NSString *message) {
         if(_audioFD>=0) fcntl(_audioFD,F_SETFL,O_NONBLOCK);
         _audioLogged=false;_audioErrorLogged=false;_streaming=true;
         bmusb::BMUSBCapture::start_bm_thread();engine->start_bm_capture();
-        _outputIndex=_profile.tickAt(hostNS()-shuttle::PlayoutDelayNS);_nextOutputNS=_profile.fieldNS(_outputIndex);
+        _outputIndex=_settings.sampleTickAt(hostNS()-shuttle::PlayoutDelayNS);_nextOutputNS=_settings.sampleNS(_outputIndex);
         _timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,_outputQueue);
-        dispatch_source_set_timer(_timer,dispatch_time(DISPATCH_TIME_NOW,0),_profile.fieldNS(),1000000);
+        dispatch_source_set_timer(_timer,dispatch_time(DISPATCH_TIME_NOW,0),_settings.sampleNS(),1000000);
         dispatch_source_set_event_handler(_timer,^{ ShuttleStream *strong=weakSelf;if(strong) [strong outputTick]; });
         dispatch_resume(_timer);_users=1;return YES;
     }catch(const std::exception &e) {
@@ -206,7 +212,7 @@ static NSError *failure(NSString *message) {
     auto *dest=static_cast<uint8_t *>(CVPixelBufferGetBaseAddress(pixel));size_t stride=CVPixelBufferGetBytesPerRow(pixel);
     bool ok=true;
     std::memset(dest,0,stride*_settings.outputHeight());
-    if(bytes) ok=_scaler->write(bytes,dest,stride);
+    if(bytes) ok=_settings.interlaced()?_interlacedScaler->write(bytes,dest,stride):_scaler->write(bytes,dest,stride);
     else for(unsigned y=0;y<_settings.outputHeight();++y) for(unsigned x=0;x<_settings.outputWidth()*2;x+=4) {
         dest[y*stride+x]=dest[y*stride+x+2]=128;dest[y*stride+x+1]=dest[y*stride+x+3]=16;
     }
@@ -223,7 +229,13 @@ static NSError *failure(NSString *message) {
     uint64_t start=_clock.video(tc,now);if(!start) return;
     @autoreleasepool {
         auto controls=std::atomic_load(&_pictureControls);
-        for(unsigned field=0;field<2;++field) {
+        if(_settings.interlaced()){
+            auto bytes=shuttle::weaveImage(frame.data+offset,v,_settings.bottomFirst);
+            controls->apply(bytes.data(),720,_profile.height(),1440);
+            if(now<_syncUntil)for(unsigned y=0;y<_profile.height();++y){unsigned temporal=(y&1)^(_settings.bottomFirst?1:0);uint8_t level=(start+temporal*_profile.fieldNS())%1000000000ULL<200000000ULL?235:16;for(unsigned x=0;x<1440;x+=4){auto p=bytes.data()+y*1440+x;p[0]=p[2]=128;p[1]=p[3]=level;}}
+            auto pixel=[self pixelWithBytes:bytes.data()];
+            if(pixel){std::lock_guard<std::mutex> guard(_picturesLock);while(_pictures.size()>=12)_pictures.pop_front();_pictures.push_back({start,std::move(pixel)});}
+        }else for(unsigned field=0;field<2;++field) {
             auto bytes=shuttle::fieldImage(frame.data+offset,v,field);
             controls->apply(bytes.data(),720,_profile.height(),1440);
             if(now<_syncUntil) {
@@ -241,9 +253,9 @@ static NSError *failure(NSString *message) {
 - (void)outputTick {
     if(!_streaming) return;
     @autoreleasepool {
-        uint64_t target=_profile.fieldNS(_profile.tickAt(hostNS()-shuttle::PlayoutDelayNS));
+        uint64_t target=_settings.sampleNS(_settings.sampleTickAt(hostNS()-shuttle::PlayoutDelayNS));
         // Preserve timestamps even after a system scheduling stall; bound catch-up work.
-        if(target>_nextOutputNS+1000000000ULL) { _outputIndex=_profile.tickAt(target);_nextOutputNS=target; }
+        if(target>_nextOutputNS+1000000000ULL) { _outputIndex=_settings.sampleTickAt(target);_nextOutputNS=target; }
         while(_streaming && _nextOutputNS<=target) {
             bool fresh=false;
             { std::lock_guard<std::mutex> guard(_picturesLock);
@@ -258,14 +270,14 @@ static NSError *failure(NSString *message) {
             // Core Audio exposes the buffered input at its playout timestamp.
             // Tag video at the same playout instant, keeping both devices aligned.
             uint64_t presentationNS=_nextOutputNS+shuttle::PlayoutDelayNS;
-            CMSampleTimingInfo timing{CMTimeMake(_profile.rateDen(),_profile.fieldNom()),CMTimeMake(presentationNS,1000000000),kCMTimeInvalid};
+            CMSampleTimingInfo timing{CMTimeMake(_profile.rateDen(),_settings.sampleRateNom()),CMTimeMake(presentationNS,1000000000),kCMTimeInvalid};
             if(!rc) rc=CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault,picture.get(),fmt,&timing,&sample);
             if(fmt) CFRelease(fmt);
             if(!rc) {
                 [_stream sendSampleBuffer:sample discontinuity:CMIOExtensionStreamDiscontinuityFlagNone hostTimeInNanoseconds:presentationNS];
                 CFRelease(sample);++_sequence;
             }
-            _nextOutputNS=_profile.fieldNS(++_outputIndex);
+            _nextOutputNS=_settings.sampleNS(++_outputIndex);
         }
     }
 }
@@ -305,7 +317,7 @@ static NSError *failure(NSString *message) {
     if([properties containsObject:CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID]) p.linkedCoreAudioDeviceUID=@"local.shuttle.audio.stereo";
     if([properties containsObject:SettingsProperty]) {
         NSMutableDictionary *state=[_configuration mutableCopy];state[@"detected_standard"]=_video.detectedStandard;
-        state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;
+        state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;state[@"capture_aspect"]=@YES;state[@"capture_interlace"]=@YES;
         auto *attributes=[CMIOExtensionPropertyAttributes propertyAttributesWithMinValue:nil maxValue:nil validValues:nil readOnly:NO];
         [p setPropertyState:[CMIOExtensionPropertyState propertyStateWithValue:settingsJSON(state) attributes:attributes] forProperty:SettingsProperty];
     }return p;
@@ -315,6 +327,8 @@ static NSError *failure(NSString *message) {
     if(!value) return YES;
     NSMutableDictionary *incoming=[settingsDictionary(value) mutableCopy];
     if(incoming && !incoming[@"output_size"]) incoming[@"output_size"]=_configuration[@"output_size"]?:@"Native";
+    if(incoming && !incoming[@"input_aspect"]) incoming[@"input_aspect"]=_configuration[@"input_aspect"]?:@"4:3";
+    if(incoming && !incoming[@"field_order"])incoming[@"field_order"]=_configuration[@"field_order"]?:@"Top first";
     for(NSString *key in @[@"brightness",@"contrast",@"colour",@"sharpness"]) if(incoming && !incoming[key]) incoming[key]=_configuration[key]?:defaultSettings()[key];
     shuttle::CaptureSettings settings;
     if(!parseSettings(incoming,settings)) { if(error) *error=failure(@"Invalid capture settings.");return NO; }
@@ -322,14 +336,14 @@ static NSError *failure(NSString *message) {
     for(NSString *key in defaultSettings()) clean[key]=incoming[key]?:defaultSettings()[key];
     if([clean isEqual:_configuration]) return YES;
     BOOL pictureOnly=YES;
-    for(NSString *key in @[@"standard",@"video_input",@"audio_input",@"dropout",@"output_size"])
+    for(NSString *key in @[@"standard",@"video_input",@"audio_input",@"dropout",@"output_size",@"input_aspect",@"field_order"])
         if(![clean[key] isEqual:_configuration[key]])pictureOnly=NO;
     if(pictureOnly){
         // Swap immutable control settings at a frame boundary. The USB engine,
         // stream identity, frame cadence and independent audio keep running.
         [_video updatePicture:settings.picture];_configuration=[clean copy];
         [NSUserDefaults.standardUserDefaults setObject:_configuration forKey:@"ShuttleCaptureSettings"];
-        NSMutableDictionary *state=[clean mutableCopy];state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;state[@"detected_standard"]=_video.detectedStandard;
+        NSMutableDictionary *state=[clean mutableCopy];state[@"capturing"]=@(_video.inUse);state[@"picture_live"]=@YES;state[@"capture_aspect"]=@YES;state[@"capture_interlace"]=@YES;state[@"detected_standard"]=_video.detectedStandard;
         [_device notifyPropertiesChanged:@{SettingsProperty:[CMIOExtensionPropertyState propertyStateWithValue:settingsJSON(state)]}];
         return YES;
     }

@@ -128,7 +128,7 @@ std::shared_ptr<aspl::Driver> createDriver() {
     device->SetControlHandler(handler);device->SetIOHandler(handler);
     auto plugin=std::make_shared<aspl::Plugin>(context);plugin->AddDevice(device);
     aspl::DeviceParameters outputParams;
-    outputParams.Name="Intensity Shuttle — HDMI Audio";outputParams.Manufacturer="Local development build";
+    outputParams.Name="Virtual Shuttle Audio";outputParams.Manufacturer="Local development build";
     outputParams.DeviceUID="local.shuttle.audio.hdmi";outputParams.ModelUID="local.shuttle.audio.hdmi";
     outputParams.SampleRate=48000;outputParams.ChannelCount=2;outputParams.Latency=shuttle_output_audio::OutputLatencyFrames;
     outputParams.ZeroTimeStampPeriod=512;outputParams.CanBeDefaultForSystemSounds=false;

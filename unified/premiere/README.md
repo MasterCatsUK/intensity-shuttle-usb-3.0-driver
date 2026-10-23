@@ -1,32 +1,23 @@
-# Shuttle Premiere Pro output — 0.1.29 development
+# Shuttle Premiere Pro output — host 0.1.53 / Transmit plug-in 2
 
-Native Apple-silicon Mercury Transmit video plug-in, built against Adobe's supplied26.0 C++ SDK using the version1 transmit API. Installed Premiere25.2.3 is the live test target. Successful compilation and offline tests do not qualify actual Premiere/HDMI playback.
+Universal arm64/x86_64 Mercury Transmit video plug-in. Adobe's downloaded 26.0 SDK was used to build against the version1 API. The previously tested installed editor was Premiere25.2.3; Intel runtime and the new Mac-only/paired routes still need live qualification.
 
 ## Use
 
-1. Close Shuttle capture previews. In Shuttle Camera → Video Output choose the physical output format and source **Premiere Pro / Mercury Transmit**.
-2. Click **Start Premiere output**; wait for **Ready for Premiere**. Keep Shuttle Camera open.
-3. In Premiere Settings → Playback, enable **Mercury Transmit** and select **Intensity Shuttle — HDMI Output** under Video Device. Start with a1080p25 sequence and1080p25 physical output.
-4. For sound, in Premiere Settings → Audio Hardware choose **Intensity Shuttle — HDMI Audio** as the default output. This is the existing Core Audio device, separate from the video transmitter. The plug-in does not appear as a Transmit audio device and does not take over Premiere's playback clock.
-5. Disable Mercury Transmit before stopping output in Shuttle Camera. If you explicitly selected HDMI in Premiere Audio Hardware, select your normal audio device there afterward. Shuttle Camera's Restore audio controls the Mac's system media output, not Premiere's explicit per-application device choice.
+1. In Shuttle Video → Output Settings, choose Premiere Pro, a matching Format and **Mac screen / Shuttle output** independently: Video, Video scopes or Off. Choose a Mac display if enabled.
+2. Start Premiere output and wait for Ready. Keep Shuttle Video running.
+3. In Premiere Playback settings enable Mercury Transmit and **Intensity Shuttle — HDMI Output**. This same plug-in supplies Mac-only, Shuttle-only and both outputs.
+4. In Premiere Audio Hardware choose **Virtual Shuttle Audio** for meters and output sound. Use Shuttle Audio in the app changes only the system media route; an explicit Premiere selection must be made/restored inside Premiere. Enable Listen on Mac for local hearing.
+5. Video/Scopes and scope types can change live. Disable Mercury Transmit and Stop before changing outputs to/from Off or changing format. Stop restores a system audio route owned by the app, respecting later manual changes.
 
-Changing the app's format causes the transmitter to request a mode refresh through NeedsReset. Use matching sequence/output frame rates for initial qualification. Frame-rate conversion across mismatched cadences has not been qualified.
+Scopes omit TC/meters/safe guides; Video overlays are saved independently for Mac/Shuttle. Timecode uses Adobe sequence time plus sequence zero point/drop-frame metadata; missing timestamps display dashes. Both outputs receive rendered edits/effects/titles when Premiere supplies the frame. No audio transport or playback clock is advertised by Transmit.
 
-HDMI safe guides, L/R meters, audio offset and timecode overlay reuse the existing engine. Timecode is taken from nonnegative Adobe sequence time plus sequence zero point and drop-frame metadata; an immediate frame without a timestamp has no valid timecode and displays dashes. Actual Premiere metadata delivery still requires live checking.
+## Transport and build
 
-## Build
+Run `premiere/build.sh '/path/to/Adobe SDK/Examples'`. Obtain the SDK separately; no Adobe headers/sample code are distributed. Original project plug-in sources are GPL-2.0-or-later.
 
-Run `premiere/build.sh '/path/to/Adobe SDK/Examples'`. The SDK must be obtained separately from Adobe; no SDK headers or Adobe sample code are included in the source distribution. The plug-in's source is original, uses Adobe's declared public interfaces, and is distributed under GPL-2.0-or-later alongside this project.
+Install path: `/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle`. Premiere25 scanned this legacy Plug-ins path in Plugin Loading.log.
 
-The installer places `Shuttle Transmit.bundle` under:
-`/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/`
+Premiere video uses localhost TCP47540. Mac-only uses ShuttleScreenOutput directly; paired uses one ShuttlePlayback receiver and a clean shared-memory frame feed to the Mac helper. The paired Mac tap does not bind another audio receiver. USB runs outside Premiere. PPix buffers are copied and released exactly once, with bounded worker/backpressure. Final Cut ports remain47539/47541; output13/HAL4/Transmit2 stay unchanged.
 
-Video uses localhost TCP47540, separate from FCP's unchanged47539. No USB calls occur inside Premiere. Each PPix is copied into owned memory and released exactly once; socket operations run on a worker. Both software input queue and consumed-but-not-completed frames are bounded to six. Premiere remains the clock source. There is no SDK clock callback and no fabricated hardware-completion feedback.
-
-`src/output/SharedOutputCMIO.hpp` freezes the qualified extension12 transport; the general SharedOutput.hpp adds configurable ports for Premiere. Extension12 remains byte-identical to the qualified0.1.28 build. Capture15 and HAL3 also remain unchanged.
-
-## Offline checks
-
-TransmitTest.mm checks SDK entry/lifetimes, PPix release, no audio/clock advertisement, padded and negative UYVY stride, sequence/drop-frame timecode, and six-frame physical backpressure/recovery with a private ephemeral loopback receiver. App tests use fake preferences, audio/CMIO calls and subprocesses. Nothing in those tests opens USB, modifies routes, installs a driver or closes an editor.
-
-Location correction0.1.29.1: installedPremiere25.2.3 actually scans legacy `Plug-ins`, verified in its Plugin Loading.log. SDK26 documentation path `Plugins` did not load the bundle. A separate repair installer relocates only the identical signed plug-in, preserving the unscanned copy in Backups. Host29 and all drivers remain unchanged.
+Offline tests cover launch plans, split readiness logs, scoped display conversion, clean fan-out and bounded transport. A successful build is not a live playback qualification.

@@ -1,0 +1,9 @@
+# 0.1.54 validation
+
+23 October2026. User supplied Startup.m4v and authorized the GitHub update. Only the exported project-logo clip is included, not the Final Cut library or unrelated clips. Actual AVFoundation metadata:5.64seconds,1920×1080,50fps, two audio tracks.
+
+Actual MovieSource decode test at all six wire formats verifies distinct first/final images, exact held pixels beyond EOF, silent audio tail, and nextWireFrame packets identical to the held clean image with all saved scopes/TC/meters/safe-guide flags enabled. No USB, device or audio-route writes. Startup uses Stretch, infinite last-frame output and parent-death cleanup. Original non-startup clock/pacing and scope processing are unchanged.
+
+Fake-task StartupApplication test: pending user actions dispatch exactly once only after task termination; two actions cause one terminate; deferred Quit waits; missing resource and launch failure proceed safely. No real subprocess launched. Combined UI regression: zero failures, startup checkbox/independent saved setting/hit testing/layout plus all18 editor route combinations and existing capture/recording checks. Renderer fixture entry points do not autostart. Twenty-four installer filesystem mocks pass. Nine main universal14.4+MachO/deep signatures verified; main camera/output/HAL/Premiere payloads byte-identical53. Unchanged Shuttle Player2 separate universal13.0 binaries/deep signature verified. Expanded installer/source verified at packaging.
+
+New startup runtime/USB handoff and new Premiere Mac/paired routes require live qualification after installing. Intel/older macOS and fresh-machine installation untested. This is an unsigned/ad-hoc, non-notarized development prerelease requiring the existing SIP-disabled setup. No security settings changed by the build or installer. Public release must retain these limits.

@@ -19,13 +19,13 @@ static NSError* outputError(NSString* text){return [NSError errorWithDomain:@"lo
 @property(readonly) CMIOExtensionStream* stream;
 @property(readonly) unsigned mode;
 @property(readonly) BOOL running;
-- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping;
+- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping virtualOutput:(BOOL)virtualOutput;
 - (void)poll;
 - (void)disconnected:(CMIOExtensionClient*)client;
 - (BOOL)keepPublishedWithSenderReady:(BOOL)ready mode:(unsigned)mode;
 @end
 @implementation SinkStream
-- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping{if((self=[super init])){
+- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping virtualOutput:(BOOL)virtualOutput{if((self=[super init])){
     if(mode>=6||!mapping)return nil;_index=mode;_map=std::move(mapping);
     NSMutableArray* formats=[NSMutableArray array];
     // A stream's format list is immutable. Publish a new singleton stream for
@@ -44,7 +44,7 @@ static NSError* outputError(NSString* text){return [NSError errorWithDomain:@"lo
     _formats=[formats copy];
     // The USB sender reports presentation against host time. Audio is exposed
     // separately and linked by UID; it need not master this software stream.
-    _stream=[CMIOExtensionStream streamWithLocalizedName:@"Shuttle HDMI Output (video)" streamID:[[NSUUID alloc] initWithUUIDString:@"C48BDE00-D3B0-43E1-B576-000000000090"] direction:CMIOExtensionStreamDirectionSink clockType:CMIOExtensionStreamClockTypeHostTime source:self];
+    _stream=[CMIOExtensionStream streamWithLocalizedName:virtualOutput?@"Virtual Shuttle (video)":@"Shuttle HDMI Output (video)" streamID:[[NSUUID alloc] initWithUUIDString:virtualOutput?@"C48BDE00-D3B0-43E1-B576-000000000092":@"C48BDE00-D3B0-43E1-B576-000000000090"] direction:CMIOExtensionStreamDirectionSink clockType:CMIOExtensionStreamClockTypeHostTime source:self];
 }return self;}
 - (CMIOExtensionStream*)stream{return _stream;}
 - (unsigned)mode{return _index;}
@@ -70,11 +70,11 @@ static NSError* outputError(NSString* text){return [NSError errorWithDomain:@"lo
     return result;
 }
 - (BOOL)setStreamProperties:(CMIOExtensionStreamProperties*)properties error:(NSError**)error{
-    if(properties.activeFormatIndex&&properties.activeFormatIndex.unsignedIntValue!=0){if(error)*error=outputError(@"Choose the USB output format in Shuttle Camera before enabling A/V Output.");return NO;}
+    if(properties.activeFormatIndex&&properties.activeFormatIndex.unsignedIntValue!=0){if(error)*error=outputError(@"Choose the output format in Shuttle Video before enabling A/V Output.");return NO;}
     auto base=shuttle_output::profile(static_cast<shuttle_output::Mode>(_index));
     for(NSDictionary* d in @[properties.frameDuration?:@{},properties.maxFrameDuration?:@{}])if(d.count){
         CMTime requested=CMTimeMakeFromDictionary((__bridge CFDictionaryRef)d);
-        if(!CMTIME_IS_NUMERIC(requested)||CMTimeGetSeconds(requested)<=0||std::fabs(1.0/CMTimeGetSeconds(requested)-double(base.rateNom)/base.rateDen)>=0.001){if(error)*error=outputError(@"Frame rate does not match the ready USB output format.");return NO;}
+        if(!CMTIME_IS_NUMERIC(requested)||CMTimeGetSeconds(requested)<=0||std::fabs(1.0/CMTimeGetSeconds(requested)-double(base.rateNom)/base.rateDen)>=0.001){if(error)*error=outputError(@"Frame rate does not match the ready output format.");return NO;}
     }
     return YES;
 }
@@ -83,7 +83,7 @@ static NSError* outputError(NSString* text){return [NSError errorWithDomain:@"lo
     if(_running||!_client){if(error)*error=outputError(@"Output already has a client.");return NO;}
     auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(150);
     do{_map->pump();if(_map->data().consumer.load()&&_map->data().mode.load()==_index)break;usleep(1000);}while(std::chrono::steady_clock::now()<deadline);
-    if(!_map->data().consumer.load()||_map->data().mode.load()!=_index){_client=nil;if(error)*error=outputError(@"Start timeline output in Shuttle Camera with the matching format before enabling A/V Output in the editor.");NSLog(@"Shuttle output start refused: USB sender is not ready in matching format");return NO;}
+    if(!_map->data().consumer.load()||_map->data().mode.load()!=_index){_client=nil;if(error)*error=outputError(@"Start timeline output in Shuttle Video with the matching format before enabling A/V Output in the editor.");NSLog(@"Shuttle output start refused: USB sender is not ready in matching format");return NO;}
     auto& ring=_map->data();if(!ring.consumer.load())ring.read=ring.written.load();ring.mode=_index;ring.producer=1;_received=_scheduled=0;
     _publication.clear();_credits.clear();_running=YES;_pulling=NO;_ended=NO;++_generation;_underruns=0;
     _timer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,dispatch_get_main_queue());
@@ -138,59 +138,67 @@ static NSError* outputError(NSString* text){return [NSError errorWithDomain:@"lo
 }
 @end
 @interface SinkDevice : NSObject <CMIOExtensionDeviceSource>
-@property CMIOExtensionDevice* device;@property SinkStream* video;
-- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping;
+@property CMIOExtensionDevice* device;@property SinkStream* video;@property BOOL virtualOutput;
+- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping virtualOutput:(BOOL)virtualOutput;
 @end
 @implementation SinkDevice
-- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping{if((self=[super init])){self.video=[[SinkStream alloc] initWithMode:mode mapping:std::move(mapping)];if(!self.video)return nil;self.device=[CMIOExtensionDevice deviceWithLocalizedName:@"Intensity Shuttle — HDMI Output" deviceID:[[NSUUID alloc] initWithUUIDString:@"C48BDE00-D3B0-43E1-B576-000000000091"] legacyDeviceID:@"local.shuttle.output.cmio" source:self];if(![self.device addStream:self.video.stream error:nil])return nil;}return self;}
+- (instancetype)initWithMode:(unsigned)mode mapping:(std::shared_ptr<shuttle_sink::Mapping>)mapping virtualOutput:(BOOL)virtualOutput{if((self=[super init])){self.virtualOutput=virtualOutput;self.video=[[SinkStream alloc] initWithMode:mode mapping:std::move(mapping) virtualOutput:virtualOutput];if(!self.video)return nil;self.device=[CMIOExtensionDevice deviceWithLocalizedName:virtualOutput?@"Virtual Shuttle":@"Intensity Shuttle — HDMI Output" deviceID:[[NSUUID alloc] initWithUUIDString:virtualOutput?@"C48BDE00-D3B0-43E1-B576-000000000093":@"C48BDE00-D3B0-43E1-B576-000000000091"] legacyDeviceID:virtualOutput?@"local.shuttle.output.virtual":@"local.shuttle.output.cmio" source:self];if(![self.device addStream:self.video.stream error:nil])return nil;}return self;}
 - (NSSet*)availableProperties{return [NSSet setWithObjects:CMIOExtensionPropertyDeviceModel,CMIOExtensionPropertyDeviceTransportType,CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID,nil];}
-- (CMIOExtensionDeviceProperties*)devicePropertiesForProperties:(NSSet*)properties error:(NSError**)error{auto* p=[CMIOExtensionDeviceProperties devicePropertiesWithDictionary:@{}];if([properties containsObject:CMIOExtensionPropertyDeviceModel])p.model=@"Intensity Shuttle HDMI Output — experimental";if([properties containsObject:CMIOExtensionPropertyDeviceTransportType])p.transportType=@(0x76697274);if([properties containsObject:CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID])p.linkedCoreAudioDeviceUID=@"local.shuttle.audio.hdmi";return p;}
+- (CMIOExtensionDeviceProperties*)devicePropertiesForProperties:(NSSet*)properties error:(NSError**)error{auto* p=[CMIOExtensionDeviceProperties devicePropertiesWithDictionary:@{}];if([properties containsObject:CMIOExtensionPropertyDeviceModel])p.model=self.virtualOutput?@"Virtual Shuttle — Mac display":@"Intensity Shuttle HDMI Output — experimental";if([properties containsObject:CMIOExtensionPropertyDeviceTransportType])p.transportType=@(0x76697274);if([properties containsObject:CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID])p.linkedCoreAudioDeviceUID=@"local.shuttle.audio.hdmi";return p;}
 - (BOOL)setDeviceProperties:(CMIOExtensionDeviceProperties*)properties error:(NSError**)error{return YES;}
 @end
 @interface SinkProvider : NSObject <CMIOExtensionProviderSource> {
-    std::shared_ptr<shuttle_sink::Mapping> _map;
+    std::shared_ptr<shuttle_sink::Mapping> _map,_virtualMap;
     dispatch_source_t _readinessTimer;
 }
-@property CMIOExtensionProvider* provider;@property SinkDevice* output;
+@property CMIOExtensionProvider* provider;@property SinkDevice* output;@property SinkDevice* virtualOutput;
 - (void)checkUSBReadiness;
 @end
 @implementation SinkProvider
 - (instancetype)init{if((self=[super init])){
     self.provider=[CMIOExtensionProvider providerWithSource:self clientQueue:dispatch_get_main_queue()];
-    _map=std::make_shared<shuttle_sink::Mapping>();
-    try{_map->open(true);}catch(const std::exception& e){NSLog(@"Shuttle sink transport: %s",e.what());return nil;}
+    _map=std::make_shared<shuttle_sink::Mapping>();_virtualMap=std::make_shared<shuttle_sink::Mapping>(shuttle_sink::VirtualPort);
+    try{_map->open(true);_virtualMap->open(true);}catch(const std::exception& e){NSLog(@"Shuttle sink transport: %s",e.what());return nil;}
     // Enumerating the provider starts this service even when it has no devices.
     // The hello is released only after a successful physical USB transfer.
     _readinessTimer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,dispatch_get_main_queue());
     dispatch_source_set_timer(_readinessTimer,dispatch_time(DISPATCH_TIME_NOW,0),10*NSEC_PER_MSEC,NSEC_PER_MSEC);
     __weak SinkProvider* weakSelf=self;dispatch_source_set_event_handler(_readinessTimer,^{[weakSelf checkUSBReadiness];});dispatch_resume(_readinessTimer);
 }return self;}
-- (void)checkUSBReadiness {
-    _map->pump(!self.output.video.running);
-    auto& ring=_map->data();BOOL ready=ring.consumer.load();unsigned mode=ring.mode.load();
-    if(self.output&&![self.output.video keepPublishedWithSenderReady:ready mode:mode]){
+- (void)checkUSBReadiness {[self checkOutput:NO];[self checkOutput:YES];}
+- (void)checkOutput:(BOOL)virtualOutput {
+    auto mapping=virtualOutput?_virtualMap:_map;SinkDevice* current=virtualOutput?self.virtualOutput:self.output;
+    mapping->pump(!current.video.running);
+    auto& ring=mapping->data();BOOL ready=ring.consumer.load();unsigned mode=ring.mode.load();
+    if(current&&![current.video keepPublishedWithSenderReady:ready mode:mode]){
         NSError* error=nil;
-        if(![self.provider removeDevice:self.output.device error:&error]){NSLog(@"Shuttle could not withdraw HDMI output: %@",error);return;}
-        [self.output.video stopStreamAndReturnError:nil];self.output=nil;
-        NSLog(@"Shuttle HDMI output withdrawn: USB sender is not ready.");
-        ready=_map->data().consumer.load();mode=_map->data().mode.load();
+        if(![self.provider removeDevice:current.device error:&error]){NSLog(@"Shuttle could not withdraw output: %@",error);return;}
+        [current.video stopStreamAndReturnError:nil];current=nil;
+        if(virtualOutput)self.virtualOutput=nil;else self.output=nil;
+        ready=mapping->data().consumer.load();mode=mapping->data().mode.load();
     }
-    if(!self.output&&ready&&mode<6){
-        SinkDevice* output=[[SinkDevice alloc] initWithMode:mode mapping:_map];NSError* error=nil;
-        if(!output||![self.provider addDevice:output.device error:&error]){NSLog(@"Shuttle could not publish ready HDMI output: %@",error);return;}
-        self.output=output;NSLog(@"Shuttle HDMI output ready and published; USB format %u",mode);
+    if(!current&&ready&&mode<6){
+        SinkDevice* output=[[SinkDevice alloc] initWithMode:mode mapping:mapping virtualOutput:virtualOutput];NSError* error=nil;
+        if(!output||![self.provider addDevice:output.device error:&error]){NSLog(@"Shuttle could not publish prepared output: %@",error);return;}
+        if(virtualOutput)self.virtualOutput=output;else self.output=output;
+        NSLog(@"%@ ready and published; format %u",virtualOutput?@"Virtual Shuttle":@"Intensity Shuttle",mode);
     }
 }
 - (void)dealloc{if(_readinessTimer)dispatch_source_cancel(_readinessTimer);}
 - (NSSet*)availableProperties{return [NSSet setWithObjects:CMIOExtensionPropertyProviderName,CMIOExtensionPropertyProviderManufacturer,nil];}
 - (BOOL)connectClient:(CMIOExtensionClient*)client error:(NSError**)error{return YES;}
-- (void)disconnectClient:(CMIOExtensionClient*)client{[self.output.video disconnected:client];}
-- (CMIOExtensionProviderProperties*)providerPropertiesForProperties:(NSSet*)properties error:(NSError**)error{auto* p=[CMIOExtensionProviderProperties providerPropertiesWithDictionary:@{}];if([properties containsObject:CMIOExtensionPropertyProviderName])p.name=@"Shuttle HDMI Output";if([properties containsObject:CMIOExtensionPropertyProviderManufacturer])p.manufacturer=@"Local development build";return p;}
+- (void)disconnectClient:(CMIOExtensionClient*)client{[self.output.video disconnected:client];[self.virtualOutput.video disconnected:client];}
+- (CMIOExtensionProviderProperties*)providerPropertiesForProperties:(NSSet*)properties error:(NSError**)error{auto* p=[CMIOExtensionProviderProperties providerPropertiesWithDictionary:@{}];if([properties containsObject:CMIOExtensionPropertyProviderName])p.name=@"Shuttle Video Outputs";if([properties containsObject:CMIOExtensionPropertyProviderManufacturer])p.manufacturer=@"Local development build";return p;}
 - (BOOL)setProviderProperties:(CMIOExtensionProviderProperties*)properties error:(NSError**)error{return YES;}
 @end
 int main(int argc,char**argv){@autoreleasepool{if(argc==2&&!strcmp(argv[1],"--validate")){
     auto mapping=std::make_shared<shuttle_sink::Mapping>();mapping->open(true);NSMutableArray* descriptions=[NSMutableArray array];
-    for(unsigned i=0;i<6;++i){SinkStream* stream=[[SinkStream alloc] initWithMode:i mapping:mapping];NSArray* formats=stream.formats;if(formats.count!=1)return 2;CMIOExtensionStreamFormat* f=formats[0];auto p=shuttle_output::profile(static_cast<shuttle_output::Mode>(i));if(f.validFrameDurations.count!=1||CMTimeCompare(CMTimeMakeFromDictionary((__bridge CFDictionaryRef)f.validFrameDurations[0]),CMTimeMake(p.rateDen,p.rateNom)))return 3;for(id other in descriptions)if(CMFormatDescriptionEqual(f.formatDescription,(__bridge CMFormatDescriptionRef)other))return 4;[descriptions addObject:(__bridge id)f.formatDescription];if([stream streamPropertiesForProperties:[NSSet setWithObject:CMIOExtensionPropertyStreamActiveFormatIndex] error:nil].activeFormatIndex.unsignedIntValue)return 5;}
-    for(unsigned i=0;i<6;++i){SinkStream* stream=[[SinkStream alloc] initWithMode:i mapping:mapping];auto* props=[stream streamPropertiesForProperties:[NSSet setWithObject:CMIOExtensionPropertyStreamLatency] error:nil];CMIOExtensionPropertyState* state=props.propertiesDictionary[CMIOExtensionPropertyStreamLatency];if(![stream.availableProperties containsObject:CMIOExtensionPropertyStreamLatency]||![state.value isEqual:@(shuttle_sink::OutputCredits::Limit)])return 6;}
+    for(unsigned i=0;i<6;++i){SinkStream* stream=[[SinkStream alloc] initWithMode:i mapping:mapping virtualOutput:NO];NSArray* formats=stream.formats;if(formats.count!=1)return 2;CMIOExtensionStreamFormat* f=formats[0];auto p=shuttle_output::profile(static_cast<shuttle_output::Mode>(i));if(f.validFrameDurations.count!=1||CMTimeCompare(CMTimeMakeFromDictionary((__bridge CFDictionaryRef)f.validFrameDurations[0]),CMTimeMake(p.rateDen,p.rateNom)))return 3;for(id other in descriptions)if(CMFormatDescriptionEqual(f.formatDescription,(__bridge CMFormatDescriptionRef)other))return 4;[descriptions addObject:(__bridge id)f.formatDescription];if([stream streamPropertiesForProperties:[NSSet setWithObject:CMIOExtensionPropertyStreamActiveFormatIndex] error:nil].activeFormatIndex.unsignedIntValue)return 5;}
+    for(unsigned i=0;i<6;++i){SinkStream* stream=[[SinkStream alloc] initWithMode:i mapping:mapping virtualOutput:NO];auto* props=[stream streamPropertiesForProperties:[NSSet setWithObject:CMIOExtensionPropertyStreamLatency] error:nil];CMIOExtensionPropertyState* state=props.propertiesDictionary[CMIOExtensionPropertyStreamLatency];if(![stream.availableProperties containsObject:CMIOExtensionPropertyStreamLatency]||![state.value isEqual:@(shuttle_sink::OutputCredits::Limit)])return 6;}
+    SinkDevice* physical=[[SinkDevice alloc] initWithMode:2 mapping:mapping virtualOutput:NO];
+    SinkDevice* virtualDevice=[[SinkDevice alloc] initWithMode:2 mapping:mapping virtualOutput:YES];
+    if(![virtualDevice.device.localizedName isEqual:@"Virtual Shuttle"]||![physical.device.localizedName isEqual:@"Intensity Shuttle — HDMI Output"]||[virtualDevice.device.deviceID isEqual:physical.device.deviceID])return 7;
+    for(SinkDevice* device in @[physical,virtualDevice]){auto* props=[device devicePropertiesForProperties:[NSSet setWithObject:CMIOExtensionPropertyDeviceLinkedCoreAudioDeviceUID] error:nil];if(![props.linkedCoreAudioDeviceUID isEqual:@"local.shuttle.audio.hdmi"])return 8;}
+    puts("PASS: distinct Virtual Shuttle and Intensity Shuttle identities.");
     puts("PASS: Six singleton USB-ready output formats with exact discrete PAL/NTSC durations and bounded six-frame stream latency");return 0;
 }SinkProvider* source=[SinkProvider new];if(!source)return 1;[CMIOExtensionProvider startServiceWithProvider:source.provider];[[NSRunLoop currentRunLoop] run];}return 0;}

@@ -4,7 +4,7 @@ Run commands from the repository root. Adobe SDK files are obtained separately.
 
 ## Build the whole installer
 
-1. Use an Apple-silicon Mac with the macOS27 SDK/Command Line Tools (the tested compiler environment), Python3, make and normal Apple command-line signing/package tools. Full Xcode or a compatible Command Line Tools installation is needed. `xcode-select --install` requests Apple's installation if missing.
+1. Use an Apple-silicon or Intel Mac with the macOS27 SDK/Command Line Tools (the tested compiler environment), Python3, make and normal Apple command-line signing/package tools. Full Xcode or a compatible Command Line Tools installation is needed. `xcode-select --install` requests Apple's installation if missing.
 2. Obtain the Premiere Pro C++ SDK separately from Adobe. The tested SDK was26.0; the plug-in uses transmit interfacev1 and was used with Premiere25.2.3. Adobe headers/sample code are not redistributed in this source folder.
 3. In Terminal, change to this folder. Keep the SDK outside it, then run:
 
@@ -14,6 +14,8 @@ Run commands from the repository root. Adobe SDK files are obtained separately.
 
 The script builds camera+app, HAL3 audio, and the Premiere transmitter, stages sources and binaries, then builds/expands/checks the installer. Results are in `build/packages`. Everything stays under this source folder; nothing is installed, activated or flashed. Repeated staging is deliberately refused: move `build/release-source` aside before repeating a complete package build. Existing work is not silently deleted.
 
+The scripts build universal arm64/x86_64 binaries targeting macOS 14.4+. Intel and older macOS runtime are untested. CMIO stream latency requires 14.4. The Adobe SDK is a separate download; its headers are not redistributed.
+
 ## Build individual components
 
 ```sh
@@ -22,7 +24,7 @@ The script builds camera+app, HAL3 audio, and the Premiere transmitter, stages s
 ./unified/premiere/build.sh "/absolute/path/to/Adobe SDK/Examples"
 ```
 
-The app is `build/Shuttle Camera.app`, audio is `audio/build/Shuttle Audio.driver`, and the Premiere bundle is `unified/premiere/build/Shuttle Transmit.bundle`. You can build the app/audio without downloading Adobe's SDK. The Premiere bundle remains separate from the app and is installed into the shared Adobe Plug-ins location by the installer.
+The app is `build/Shuttle Video.app`, audio is `audio/build/Shuttle Audio.driver`, and the Premiere bundle is `unified/premiere/build/Shuttle Transmit.bundle`. You can build the app/audio without downloading Adobe's SDK. The Premiere bundle remains separate from the app and is installed into the shared Adobe Plug-ins location by the installer.
 
 ## Where to change things
 

@@ -28,13 +28,15 @@ static void CMIOReadEvent(void) {
 }
 static OSStatus FakeAudioGet(AudioObjectID object,const AudioObjectPropertyAddress* address,
     UInt32 qualifierBytes,const void* qualifier,UInt32* bytes,void* value) {
+    if(address->mSelector==kAudioHardwarePropertyDevices){*(AudioDeviceID*)value=10;*bytes=sizeof(AudioDeviceID);return 0;}
+    if(address->mSelector==kAudioDevicePropertyDeviceIsAlive){*(UInt32*)value=1;return 0;}
     if(address->mSelector==kAudioHardwarePropertyDefaultOutputDevice){*(AudioDeviceID*)value=10;return 0;}
     if(address->mSelector==kAudioDevicePropertyDeviceUID||address->mSelector==kAudioObjectPropertyName){
         *(CFStringRef*)value=(CFStringRef)CFRetain(address->mSelector==kAudioDevicePropertyDeviceUID?CFSTR("offline.speakers"):CFSTR("Offline speakers"));return 0;
     }
     assert(false&&"Unexpected audio read");return -1;
 }
-static OSStatus FakeAudioSize(AudioObjectID,const AudioObjectPropertyAddress*,UInt32,const void*,UInt32*) {assert(false);return -1;}
+static OSStatus FakeAudioSize(AudioObjectID,const AudioObjectPropertyAddress* a,UInt32,const void*,UInt32* size) {if(a->mSelector==kAudioHardwarePropertyDevices||a->mSelector==kAudioDevicePropertyStreams){*size=sizeof(AudioDeviceID);return 0;}assert(false);return -1;}
 static OSStatus FakeAudioSettable(AudioObjectID,const AudioObjectPropertyAddress*,Boolean*) {assert(false);return -1;}
 static OSStatus FakeAudioSet(AudioObjectID,const AudioObjectPropertyAddress*,UInt32,const void*,UInt32,const void*) {++audioWrites;assert(false&&"Audio writes forbidden");return -1;}
 static OSStatus FakeAudioAdd(AudioObjectID,const AudioObjectPropertyAddress*,dispatch_queue_t,AudioObjectPropertyListenerBlock) {return 0;}
@@ -76,6 +78,9 @@ static OSStatus FakeCMIOSet(CMIOObjectID,const CMIOObjectPropertyAddress*,UInt32
 @end
 @implementation StartupDefaults
 + (instancetype)standardUserDefaults {static StartupDefaults* defaults;if(!defaults){defaults=[StartupDefaults new];defaults.values=[NSMutableDictionary dictionary];}return defaults;}
+- (id)objectForKey:(NSString*)key{return self.values[key];}
+- (double)doubleForKey:(NSString*)key{return [self.values[key] doubleValue];}
+- (void)setDouble:(double)value forKey:(NSString*)key{self.values[key]=@(value);}
 - (NSInteger)integerForKey:(NSString*)key{return [self.values[key] integerValue];}
 - (BOOL)boolForKey:(NSString*)key{return [self.values[key] boolValue];}
 - (NSString*)stringForKey:(NSString*)key{return self.values[key];}
@@ -224,7 +229,7 @@ int main(void){@autoreleasepool {
     Check(taskTerminates==before+1&&!task.running&&host.task==nil,@"missing-driver deadline terminates and releases the fake sender");
     Check(!timer.valid&&host.readinessTimer==nil,@"timeout invalidates its asynchronous timer");
     Check(host.start.enabled&&host.mode.enabled&&host.source.enabled&&!host.stop.enabled,@"timeout restores idle controls");
-    Check([host.log.string containsString:@"did not become ready"],@"timeout retains actionable missing-driver guidance in the log");Cleanup(host);
+    Check([host.log.string containsString:@"Output driver13 is required"],@"timeout retains actionable missing-driver guidance in the log");Cleanup(host);
 
     ResetScenario();launchShouldFail=true;host=NewHost();SelectTimeline(host);before=taskLaunches;[host startOutput:nil];
     Check(taskLaunches==before+1&&host.task==nil&&host.readinessTimer==nil,@"launch failure leaves neither sender nor timer");
@@ -239,6 +244,13 @@ int main(void){@autoreleasepool {
     Check(cmioReads==0&&![host.readinessLabel.stringValue containsString:@"Ready for Premiere"],@"Premiere is not ready merely because its process starts");
     [host handleOutputText:@"Premiere USB "];[host handleOutputText:@"ready — enable Mercury Transmit."];
     Check([host.readinessLabel.stringValue containsString:@"Ready for Premiere"]&&!host.readinessTimer,@"Premiere readiness requires physical USB completion, including split log chunks");Cleanup(host);
+    ResetScenario();[[StartupDefaults standardUserDefaults] setInteger:1 forKey:@"FCPOutputDestination"];[[StartupDefaults standardUserDefaults] setInteger:5 forKey:@"VirtualOutputView"];
+    host=NewHost();[host.source selectItemAtIndex:3];[host sourceChanged:nil];
+    Check(host.macView.indexOfSelectedItem==1&&host.macScope.indexOfSelectedItem==4&&host.shuttleView.indexOfSelectedItem==2,@"Existing Mac-only scopes migrate without enabling the Shuttle");
+    before=taskLaunches;[host startOutput:nil];
+    Check(taskLaunches==before+1&&[host.task.executableURL.lastPathComponent isEqual:@"ShuttleScreenOutput"]&&[host.task.arguments[0] isEqual:@"--premiere"],@"Premiere Mac-only launches a screen receiver with no USB helper");
+    Check(cmioReads==0&&![host.readinessLabel.stringValue containsString:@"Ready for Premiere"],@"Mac-only Premiere also waits for receiver readiness");
+    [host handleOutputText:@"Premiere Mac "];[host handleOutputText:@"ready on display 1"];Check([host.readinessLabel.stringValue containsString:@"Ready for Premiere"]&&!host.readinessTimer,@"Premiere Mac readiness handles split logs without CMIO enumeration");Cleanup(host);
     printf("RESULT: %u failures; %u fake launches, %u fake terminations, zero real helpers or device writes.\n",failures,taskLaunches,taskTerminates);
     return failures?1:0;
 }}

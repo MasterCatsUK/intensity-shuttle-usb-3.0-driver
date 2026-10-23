@@ -54,7 +54,7 @@ DesktopSource::DesktopSource(uint32_t displayID,shuttle_output::Mode mode,shuttl
     // maps to the whole fixed output surface, including live desktop mode changes.
     // Fit/Fill geometry already includes non-square PAL/NTSC output pixels.
     // SCK's own square-pixel aspect correction would add unwanted borders.
-    config.preservesAspectRatio=NO;
+    if (@available(macOS 14.0, *)) config.preservesAspectRatio=NO;
     s.receiver=[ShuttleDesktopReceiver new];s.receiver.frames=s.frames;s.queue=dispatch_queue_create("local.shuttle.desktop",DISPATCH_QUEUE_SERIAL);
     s.stream=[[SCStream alloc] initWithFilter:filter configuration:config delegate:s.receiver];
     if(![s.stream addStreamOutput:s.receiver type:SCStreamOutputTypeScreen sampleHandlerQueue:s.queue error:&error])throw std::runtime_error(error.localizedDescription.UTF8String?:"Cannot attach desktop capture");

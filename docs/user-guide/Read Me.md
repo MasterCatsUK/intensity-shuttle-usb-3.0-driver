@@ -1,10 +1,24 @@
-# Shuttle Camera 0.1.39 — Read Me
+# Shuttle Video 0.1.54 — current guide
 
-Installation & user guide · 18 October 2026
+Start with the [0.1.54 startup and installation guide](../Whats-New-0.1.54.md), the [main README](../../README.md) and the [0.1.53 illustrated output menus](../Whats-New-0.1.53.md). Older screenshots/PDF/HTML instructions below are historical. The security preparation/removal sections still apply. The standalone Shuttle Player source/guide is in player/.
+
+# Shuttle Video 0.1.53 — output setup
+
+Start with the [illustrated 0.1.53 guide](../Whats-New-0.1.53.md). **Mac screen** and **Shuttle output** each offer Video / Video scopes / Off for Final Cut and Premiere. Video/Scopes changes are live; Stop before switching outputs on/off. The older guides below retain security and capture instructions; historical destination names and screenshots have been superseded.
+
+# Shuttle Video0.1.49 — current output update
+
+The [0.1.49 illustrated guide](../Whats-New-0.1.49.md) covers simultaneous Virtual + Shuttle output, independent Video/Scopes views and the output-driver startup repair. Use that for current Output Settings. Capture/codecs and security preparation remain below. Generated historical HTML/PDF copies describe older releases.
+
+# Shuttle Video 0.1.48 — Read Me
+
+23 October 2026. Start with the [0.1.48 illustrated guide](../Whats-New-0.1.48.md) for the new Virtual Shuttle destination and independent output listening. Existing capture/codecs are covered by [0.1.47](../Whats-New-0.1.47.md) and [0.1.46](../Whats-New-0.1.46.md).
+
+Both Apple silicon and Intel binaries are included with macOS 14.4+ deployment target. Intel and older macOS runtime are untested. The security preparation below still applies to the experimental unsigned/ad-hoc build. Updated extensions21/13 require activation/approval after installation.
 
 ## Read this first
 
-**Shuttle Camera 0.1.39** - Installation and user guide - 18 October 2026
+**Shuttle Video 0.1.48** — Installation and user guide — 23 October 2026
 
 Capture PAL/NTSC VHS, play movie files, monitor Final Cut Pro or Premiere Pro, and send a Mac desktop through the Intensity Shuttle USB 3.0.
 
@@ -12,8 +26,8 @@ Capture PAL/NTSC VHS, play movie files, monitor Final Cut Pro or Premiere Pro, a
 
 ### Requirements
 
-- Apple-silicon Mac and macOS 27 or later. Testing was on one Mac Studio with macOS 27.0.1; other machines/releases are not comprehensively qualified.
-- Intensity Shuttle USB 3.0, working USB 3 cable/adapter, and administrator access. Intel Macs and the Thunderbolt Shuttle are not included.
+- Apple silicon or Intel Mac, macOS 14.4+. Testing was on one Apple-silicon Mac Studio with macOS 27.0.1; Intel and older macOS runtime are untested.
+- Intensity Shuttle USB 3.0, working USB 3 cable/adapter, and administrator access. The Thunderbolt Shuttle is not supported. No Shuttle hardware is needed for Virtual Shuttle.
 - VCR with S-Video or composite and RCA stereo for tape capture. A compatible TV/monitor or recorder for playback.
 
 ### One device, two workflows
@@ -65,7 +79,7 @@ Use the removal/restoration steps at the end when finished. Continued operation 
 
 1. Obtain **Shuttle-Capture-0.1.39.pkg** from a trusted project release. The GitHub source-code ZIP is not the installer. Compare its SHA-256 with the release checksums.
 2. Disable editor external output. Stop capture/playback and quit Shuttle Camera, the editors and camera apps.
-3. Open the package, check that its heading says **0.1.39**, and install on the current startup volume. Enter your administrator password in macOS when requested.
+3. Open the package, check that its heading says **0.1.48**, and install on the current startup volume. Enter your administrator password in macOS when requested.
 4. If macOS blocks an unsigned package, verify its source first. If you choose to proceed, use the specific package exception under Privacy & Security where offered; do not globally disable Gatekeeper. [Apple: opening apps safely](https://support.apple.com/en-gb/102445).
 
 ### First installation: enable the drivers
@@ -224,7 +238,7 @@ Overlays affect the outgoing picture on compatible outputs, not the editor proje
 | Installer error | Quit editors/camera apps and stop output. Confirm the installer heading/version; use the startup volume. Installer Log gives the actual failure. |
 | Camera missing | Enable Camera in Help > Driver Setup and approve Camera Extensions; reopen the recording app. |
 | No capture audio | Choose the separate Stereo Audio microphone, Analog RCA input and microphone permission. |
-| Screen permission loops | Quit Shuttle Camera. Remove its old Screen & System Audio Recording entry, add /Applications/Shuttle Camera.app again, enable and reopen. Ad-hoc updates can leave an old permission signature. |
+| Screen permission loops | Quit Shuttle Camera. Remove its old Screen & System Audio Recording entry, add /Applications/Shuttle Video.app again, enable and reopen. Ad-hoc updates can leave an old permission signature. |
 | SD screen absent in Displays | Select Extended display and Start. Use current software; PAL/NTSC now start at 1024x768. Test pattern does not create a desktop. |
 | Only part of a desktop shows | Stop, select Stretch, start again. Stretch follows live desktop size changes; restart Fit/Fill after a mode change. |
 | Editor output choppy | Match timeline/output cadence; compare A/V Output off/on. Check rendering/media load and collect diagnostics during the affected session. |
@@ -238,12 +252,12 @@ For a report, include app/macOS/editor versions, project/source frame rate, outp
 
 1. Save work. Disable editor external output, stop playback/capture, restore sound and quit clients.
 2. Use Help > Driver Setup > Disable Camera. Turn off both Shuttle Camera Extensions in System Settings.
-3. Move Shuttle Camera.app from Applications to the Bin. Allow macOS to remove bundled extensions if prompted. Do not manually delete /Library/SystemExtensions.
+3. Move Shuttle Video.app from Applications to the Bin. Allow macOS to remove bundled extensions if prompted. Do not manually delete /Library/SystemExtensions.
 4. In Finder, move only this project's audio driver and Premiere bundle at the paths below to the Bin. Administrator approval may be required. Restart to unload audio and finish pending removal.
 
 ### Installed components
 
-- App: `/Applications/Shuttle Camera.app`
+- App: `/Applications/Shuttle Video.app`
 - Audio: `/Library/Audio/Plug-Ins/HAL/Shuttle Audio.driver`
 - Premiere: `/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/Shuttle/Shuttle Transmit.bundle`
 - Source, status and backups: `/Library/Application Support/Shuttle Camera`. User settings/media are under the user's Library/Application Support/Shuttle Camera.

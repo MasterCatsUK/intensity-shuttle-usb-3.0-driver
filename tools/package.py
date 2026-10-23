@@ -5,10 +5,12 @@ import sys
 
 app, ext = map(Path, sys.argv[1:])
 common = dict(CFBundleDevelopmentRegion="en", CFBundleShortVersionString="0.1",
-              CFBundleVersion="17", LSMinimumSystemVersion="27.0")
-host = dict(common, CFBundleIdentifier="local.shuttle.camera", CFBundleName="Shuttle Camera",
+              CFBundleVersion="21", LSMinimumSystemVersion="14.4")
+host = dict(common, CFBundleIdentifier="local.shuttle.camera", CFBundleName="Shuttle Video",
             CFBundleExecutable="ShuttleCamera", CFBundlePackageType="APPL",
             NSHighResolutionCapable=True,
+            NSCameraUsageDescription="Show and record video from the Intensity Shuttle.",
+            NSMicrophoneUsageDescription="Record stereo audio from the Intensity Shuttle.",
             NSSystemExtensionUsageDescription="Expose the USB 3 Intensity Shuttle as a PAL or NTSC camera.")
 camera = dict(common, CFBundleIdentifier="local.shuttle.camera.extension",
               CFBundleName="Shuttle Camera Extension", CFBundleExecutable="ShuttleCameraExtension",

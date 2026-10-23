@@ -23,8 +23,26 @@ static NSDictionary* saved;
 // path with a synthetic field pair, without calling startStream or opening USB.
 @interface ShuttleStream (Fixture)
 - (NSArray*)testUniformFrame;
+- (void)testScaledSurface;
 @end
 @implementation ShuttleStream (Fixture)
+- (void)testScaledSurface {
+    std::vector<uint8_t> src(1440*_profile.height());for(size_t i=0;i<src.size();i+=4){src[i]=40;src[i+1]=90;src[i+2]=200;src[i+3]=90;}
+    Pixel pixel=[self pixelWithBytes:src.data()];assert(pixel);
+    unsigned w=_settings.outputWidth(),h=_settings.outputHeight();assert(CVPixelBufferGetWidth(pixel.get())==w&&CVPixelBufferGetHeight(pixel.get())==h);
+    CVPixelBufferLockBaseAddress(pixel.get(),kCVPixelBufferLock_ReadOnly);auto b=static_cast<uint8_t*>(CVPixelBufferGetBaseAddress(pixel.get()));size_t stride=CVPixelBufferGetBytesPerRow(pixel.get());
+    auto centre=b+(h/2)*stride+(w/4)*4;assert(centre[0]==40&&centre[1]==90&&centre[2]==200);
+    bool border=_settings.imageWidth()!=w||_settings.imageHeight()!=h;
+    assert(b[0]==(border?128:40)&&b[1]==(border?16:90)&&b[2]==(border?128:200));
+    CVPixelBufferUnlockBaseAddress(pixel.get(),kCVPixelBufferLock_ReadOnly);
+    auto format=_formats[0];auto description=format.formatDescription;
+    assert(CMVideoFormatDescriptionGetDimensions(description).width==w);
+    NSDictionary *par=(__bridge NSDictionary*)CMFormatDescriptionGetExtension(description,kCMFormatDescriptionExtension_PixelAspectRatio);
+    assert([par[(__bridge NSString*)kCMFormatDescriptionKey_PixelAspectRatioHorizontalSpacing] unsignedIntValue]==_settings.aspectH());
+    assert([par[(__bridge NSString*)kCMFormatDescriptionKey_PixelAspectRatioVerticalSpacing] unsignedIntValue]==_settings.aspectV());
+    assert(CMTimeCompare(format.minFrameDuration,CMTimeMake(_profile.rateDen(),_profile.fieldNom()))==0);
+    Pixel black=[self pixelWithBytes:nullptr];assert(black&&CVPixelBufferGetWidth(black.get())==w);
+}
 - (NSArray*)testUniformFrame {
     bmusb::VideoFormat v;v.width=720;v.height=576;v.stride=1440;v.interlaced=true;v.has_signal=true;v.frame_rate_nom=25;v.frame_rate_den=1;v.extra_lines_top=22;v.second_field_start=335;
     std::vector<uint8_t> bytes(625*1440);for(size_t n=0;n<bytes.size();n+=4){bytes[n]=40;bytes[n+1]=90;bytes[n+2]=200;bytes[n+3]=90;}
@@ -51,6 +69,12 @@ int main(){@autoreleasepool{
     auto old=[d mutableCopy];for(NSString* key in @[@"brightness",@"contrast",@"colour",@"sharpness"])[old removeObjectForKey:key];assert(write(old));assert([device.configuration[@"brightness"] intValue]==25&&[device.configuration[@"colour"] intValue]==0);
     auto changed=[d mutableCopy];changed[@"standard"]=@"NTSC";assert(!write(changed));assert([device.configuration[@"standard"] isEqual:@"PAL"]&&rebuilds==0);
     changed=[d mutableCopy];changed[@"brightness"]=@101;assert(!write(changed));assert([device.configuration[@"brightness"] intValue]==25);
+    changed=[d mutableCopy];changed[@"input_aspect"]=@"16:9";assert(!write(changed)&&rebuilds==0);
+    for(bool ntsc:{false,true})for(bool wide:{false,true})for(auto mode:{shuttle::OutputSize::Native,shuttle::OutputSize::SquarePixels,shuttle::OutputSize::Size1280x960,shuttle::OutputSize::Size1440x1080,shuttle::OutputSize::Size1280x720,shuttle::OutputSize::Size1920x1080}){
+        shuttle::CaptureSettings settings;settings.profile.ntsc=ntsc;settings.widescreen=wide;settings.outputSize=mode;
+        ShuttleStream *candidate=[[ShuttleStream alloc] initWithSettings:settings];assert(candidate);[candidate testScaledSurface];
+    }
+    puts("PASS: all24 actual camera surfaces, borders, black fallback, pixel-aspect metadata, PAL50/NTSC59.94 cadence; active aspect change rejected");
     method_setImplementation(use,oldUse);method_setImplementation(notify,oldNotify);
     puts("PASS: actual frame pipeline changes luma90→145 and chroma→128; live updates preserve stream/device, save preferences, notify clients; legacy fields preserved; format changes/invalid values rejected");
 }}

@@ -20,7 +20,7 @@
 namespace shuttle_sink {
 constexpr size_t MaxBytes=1920*1080*2,Count=8;
 constexpr uint64_t Magic=0x53484f5554303033ULL;
-constexpr uint16_t Port=47539,PremierePort=47540;
+constexpr uint16_t Port=47539,PremierePort=47540,VirtualPort=47541;
 // CMIO clients can stop and immediately restart a stream during preroll.
 // Resetting that client's TCP session rejects stale USB acknowledgements, but
 // must not make the still-running physical device appear to be unplugged.

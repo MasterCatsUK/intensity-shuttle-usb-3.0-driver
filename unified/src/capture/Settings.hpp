@@ -3,7 +3,7 @@
 #import <Foundation/Foundation.h>
 #include "VideoProfile.hpp"
 static NSString * const SettingsProperty=@"4cc_conf_glob_0";
-static NSDictionary *defaultSettings() { return @{ @"standard":@"PAL",@"video_input":@"S-Video",@"audio_input":@"Analog RCA",@"dropout":@"Hold last frame",@"output_size":@"Native",@"brightness":@0,@"contrast":@100,@"colour":@100,@"sharpness":@0 }; }
+static NSDictionary *defaultSettings() { return @{ @"standard":@"PAL",@"video_input":@"S-Video",@"audio_input":@"Analog RCA",@"dropout":@"Hold last frame",@"output_size":@"Native",@"input_aspect":@"4:3",@"field_order":@"Top first",@"brightness":@0,@"contrast":@100,@"colour":@100,@"sharpness":@0 }; }
 static bool parseSettings(NSDictionary *d,shuttle::CaptureSettings &s) {
     if(![d isKindOfClass:NSDictionary.class]) return false;
     for(NSString *key in @[@"standard",@"video_input",@"audio_input",@"dropout"])
@@ -13,7 +13,7 @@ static bool parseSettings(NSDictionary *d,shuttle::CaptureSettings &s) {
     if(![@[@"PAL",@"NTSC"] containsObject:standard] || !videos[video] ||
        ![@[@"Analog RCA",@"Embedded digital"] containsObject:audio] || ![@[@"Hold last frame",@"Black"] containsObject:drop]) return false;
     NSString *output=d[@"output_size"]?:@"Native";
-    NSArray *sizes=@[@"Native",@"Square pixels",@"1280x960",@"1440x1080"];
+    NSArray *sizes=@[@"Native",@"Square pixels",@"1280x960",@"1440x1080",@"1280x720",@"1920x1080",@"Native interlaced",@"1920x1080 interlaced"];
     if(![output isKindOfClass:NSString.class] || ![sizes containsObject:output]) return false;
     for(NSString *key in @[@"brightness",@"contrast",@"colour",@"sharpness"]) {
         id value=d[key];if(!value)continue;
@@ -25,6 +25,12 @@ static bool parseSettings(NSDictionary *d,shuttle::CaptureSettings &s) {
     s.picture.contrast=d[@"contrast"]?[d[@"contrast"] intValue]:100;
     s.picture.colour=d[@"colour"]?[d[@"colour"] intValue]:100;
     s.picture.sharpness=d[@"sharpness"]?[d[@"sharpness"] intValue]:0;
+    NSString *aspect=d[@"input_aspect"]?:@"4:3";
+    if(![aspect isKindOfClass:NSString.class]||![@[@"4:3",@"16:9"] containsObject:aspect])return false;
+    NSString *order=d[@"field_order"]?:@"Top first";
+    if(![order isKindOfClass:NSString.class]||![@[@"Top first",@"Bottom first"] containsObject:order])return false;
+    s.bottomFirst=[order isEqual:@"Bottom first"];
+    s.widescreen=[aspect isEqual:@"16:9"];
     s.outputSize=static_cast<shuttle::OutputSize>([sizes indexOfObject:output]);
     s.profile.ntsc=[standard isEqual:@"NTSC"];s.videoInput=[videos[video] unsignedIntValue];
     s.audioInput=[audio isEqual:@"Analog RCA"]?0x10000000:0;s.blackOnDropout=[drop isEqual:@"Black"];return true;

@@ -20,7 +20,7 @@
 namespace shuttle_sink {
 constexpr size_t MaxBytes=1920*1080*2,Count=8;
 constexpr uint64_t Magic=0x53484f5554303033ULL;
-constexpr uint16_t Port=47539;
+constexpr uint16_t Port=47539,VirtualPort=47541;
 // CMIO clients can stop and immediately restart a stream during preroll.
 // Resetting that client's TCP session rejects stale USB acknowledgements, but
 // must not make the still-running physical device appear to be unplugged.
@@ -49,13 +49,14 @@ struct Ring {
 struct Header {uint64_t magic,sequence,hostNS;uint32_t mode,width,height,bytes;Timecode timecode;};
 struct Ack {uint64_t magic,sequence,hostNS;};
 inline void nonblock(int fd){fcntl(fd,F_SETFL,fcntl(fd,F_GETFL)|O_NONBLOCK);int yes=1,buffer=1024*1024;setsockopt(fd,SOL_SOCKET,SO_NOSIGPIPE,&yes,sizeof(yes));setsockopt(fd,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(yes));setsockopt(fd,SOL_SOCKET,SO_SNDBUF,&buffer,sizeof(buffer));setsockopt(fd,SOL_SOCKET,SO_RCVBUF,&buffer,sizeof(buffer));}
-inline sockaddr_in endpoint(){sockaddr_in a{};a.sin_len=sizeof(a);a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(Port);return a;}
+inline sockaddr_in endpoint(uint16_t port=Port){sockaddr_in a{};a.sin_len=sizeof(a);a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(port);return a;}
 class Mapping {
-    std::unique_ptr<Ring> ring;int fd=-1;bool connecting=false;std::vector<uint8_t> pending;size_t sent=0,ackRead=0;Ack ack{};
+    uint16_t port=Port;std::unique_ptr<Ring> ring;int fd=-1;bool connecting=false;std::vector<uint8_t> pending;size_t sent=0,ackRead=0;Ack ack{};
     std::deque<Ack> completions;
     std::chrono::steady_clock::time_point next{};
     void disconnect(){if(fd>=0)close(fd);fd=-1;connecting=false;pending.clear();completions.clear();sent=ackRead=0;ring->consumer=0;ring->read=ring->written.load();next=std::chrono::steady_clock::now()+std::chrono::seconds(1);}
 public:
+    explicit Mapping(uint16_t selected=Port):port(selected){}
     ~Mapping(){if(fd>=0)close(fd);}
     void open(bool){ring.reset(new Ring{});}
     void reset(){disconnect();ring.reset(new Ring{});next={};}
@@ -64,7 +65,7 @@ public:
     // The provider may discover the USB sender's mode before publishing a
     // stream. Active streams keep the strict matching check.
     void pump(bool discoverMode=false){
-        if(fd<0){if(std::chrono::steady_clock::now()<next)return;fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return;nonblock(fd);auto a=endpoint();int rc=connect(fd,(sockaddr*)&a,sizeof(a));if(rc&&errno!=EINPROGRESS){disconnect();return;}connecting=rc!=0;}
+        if(fd<0){if(std::chrono::steady_clock::now()<next)return;fd=socket(AF_INET,SOCK_STREAM,0);if(fd<0)return;nonblock(fd);auto a=endpoint(port);int rc=connect(fd,(sockaddr*)&a,sizeof(a));if(rc&&errno!=EINPROGRESS){disconnect();return;}connecting=rc!=0;}
         if(connecting){fd_set w;FD_ZERO(&w);FD_SET(fd,&w);timeval t{};if(select(fd+1,nullptr,&w,nullptr,&t)<=0)return;int error=0;socklen_t n=sizeof(error);if(getsockopt(fd,SOL_SOCKET,SO_ERROR,&error,&n)||error){disconnect();return;}connecting=false;}
         for(;;){ssize_t n=recv(fd,reinterpret_cast<char*>(&ack)+ackRead,sizeof(ack)-ackRead,0);if(n>0){ackRead+=size_t(n);if(ackRead==sizeof(ack)){if(ack.magic!=Magic){disconnect();return;}if(ack.sequence==UINT64_MAX){if(ack.hostNS>=6||(!discoverMode&&ack.hostNS!=ring->mode.load())){disconnect();return;}if(discoverMode)ring->mode=uint32_t(ack.hostNS);ring->consumer=1;}else{if(completions.size()>=Count*8){disconnect();return;}completions.push_back(ack);ring->ackSequence=ack.sequence;ring->ackNS=ack.hostNS;ring->ackCount.fetch_add(1);}ackRead=0;}}else {if(n==0||(errno!=EAGAIN&&errno!=EWOULDBLOCK&&errno!=EINTR))disconnect();break;}}
         if(fd<0||!ring->consumer.load())return;

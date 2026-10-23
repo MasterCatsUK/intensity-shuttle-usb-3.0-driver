@@ -8,6 +8,9 @@
 #include "AudioCursor.hpp"
 #include "WireClock.hpp"
 #include "AudioSyncPreference.hpp"
+#include "ListeningOutput.hpp"
+#include "MirrorFrame.hpp"
+#include "Scopes.hpp"
 #include <CoreMedia/CoreMedia.h>
 #include <libusb.h>
 #include <array>
@@ -34,11 +37,13 @@ struct Playback {
     std::unique_ptr<shuttle_idle::Screen> idle;
     std::unique_ptr<DesktopSource> desktop;
     std::unique_ptr<shuttle_output_audio::LiveAudioOffset> audioOffset;int lastAudioOffset=0;
-    int timecodeState=-1;bool idleScreenActive=false;
+    int timecodeState=-1;bool idleScreenActive=false,idleOnly=false;
     shuttle_output_audio::StereoMeters meters;
     std::unique_ptr<shuttle_sink::Reader> sink;uint64_t wireSequence=0,wireGeneration=0,wireStartTick=0,wireFractionNS=0;bool wireAcknowledge=false;
     std::unique_ptr<shuttle_output_audio::Reader> sinkAudio;shuttle_output_audio::AudioCursor audioCursor;shuttle_output_audio::WireClock wireClock;shuttle_output_audio::VideoClockDomain videoClock=shuttle_output_audio::VideoClockDomain::Unknown;uint64_t ptsGeneration=UINT64_MAX;unsigned ptsLogged=0;
-    bool repeat=false;std::string filename;unsigned movieIndex=0;
+    std::unique_ptr<shuttle_listen::Output> listening;
+    std::unique_ptr<shuttle_mirror::Feed> mirror;shuttle_scopes::AsyncRenderer scopes;bool dualOutput=false;
+    bool startup=false,startupHeld=false;bool repeat=false;std::string filename;unsigned movieIndex=0;
     std::vector<uint8_t> wire;size_t wireOffset=0;uint64_t microframe=0;
     unsigned fifoLevel=0,fifoCapacity=32768;bool fifoValid=false;
     bool traceFIFO=false;double fifoAverage=0;int pendingCorrection=0;int64_t totalCorrection=0;
@@ -62,6 +67,7 @@ struct Playback {
         if(movie){
             if(repeat&&movieIndex>=unsigned(std::ceil(movie->duration()*p.rateNom/p.rateDen))){movie.reset(new MovieSource(filename,mode,sizing));movieIndex=0;}
             movie->read(movieIndex++,source,pcm);
+            if(startup&&movieIndex>=unsigned(std::ceil(movie->duration()*p.rateNom/p.rateDen))&&!startupHeld){startupHeld=true;puts("Startup movie finished — holding last frame until an app action.");fflush(stdout);}
         }
         if(desktop){
             if(!desktop->read(source))shuttle_idle::black(source,p.width,p.height);
@@ -92,7 +98,8 @@ struct Playback {
         }
         if(sink&&idle){idleScreenActive=idle->update(source,sink->acknowledge,sink->hasPicture());if(idleScreenActive)showTC=false;}
         const unsigned left=(frame*8)%(p.width-128);
-        if(!movie&&!sink&&!desktop)for(unsigned y=0;y<p.height;++y) for(unsigned x=0;x<p.width;x+=2) {
+        if(idleOnly&&idle){idle->apply(source,false);idleScreenActive=true;showTC=false;}
+        if(!movie&&!sink&&!desktop&&!idleOnly)for(unsigned y=0;y<p.height;++y) for(unsigned x=0;x<p.width;x+=2) {
             auto c=bars[x*8/p.width];auto* dest=&source[(y*p.width+x)*2];
             dest[0]=c[1];dest[1]=c[0];dest[2]=c[2];dest[3]=c[0];
             if(y>p.height*3/4 && y<p.height*3/4+64 && x>=left && x<left+128) {
@@ -102,10 +109,20 @@ struct Playback {
         // Keep the physical fractional-rate audio cadence continuous across
         // movie loop boundaries; a one-sample difference is padded/truncated.
         if(movie)pcm.resize(p.audioFrames(frame)*8,0);
-        shuttle_sink::overlaySafeZones(source,p.width,p.height,shuttle_output_audio::titleSafeEnabled.load(),shuttle_output_audio::actionSafeEnabled.load());
-        if(showTC)shuttle_sink::overlayTimecode(source,p.width,p.height,sink->timecode,tcPosition);
+        // Fork the clean rendered picture/PCM before output-only overlays/scopes.
+        if(mirror)mirror->write(source,pcm,sink?sink->timecode:shuttle_sink::Timecode{},idleScreenActive,wireHostNS);
+        const auto scopeView=startup?shuttle_scopes::View::Video:shuttle_scopes::validView(shuttle_output_audio::monitorView.load());
+        const bool pictureView=scopeView==shuttle_scopes::View::Video;
+        if(!idleScreenActive&&!idleOnly)scopes.replace(source,p.width,p.height,scopeView);
+        // Scopes are a clean measurement display; remembered video overlays
+        // return when Video is selected, without changing their saved choices.
+        if(pictureView&&!startup){
+            shuttle_sink::overlaySafeZones(source,p.width,p.height,shuttle_output_audio::titleSafeEnabled.load(),shuttle_output_audio::actionSafeEnabled.load());
+            if(showTC)shuttle_sink::overlayTimecode(source,p.width,p.height,sink->timecode,tcPosition);
+        }
         meters.update(pcm,double(p.rateDen)/p.rateNom);
-        if(shuttle_output_audio::audioMetersEnabled.load()){
+        if(listening)listening->push(pcm);
+        if(pictureView&&!startup&&shuttle_output_audio::audioMetersEnabled.load()){
             shuttle_sink::TimecodeBox avoid{};
             if(showTC)avoid=shuttle_sink::timecodeOverlayBox(p.width,p.height,sink->timecode,tcPosition);
             shuttle_sink::overlayAudioMeters(source,p.width,p.height,meters,shuttle_output_audio::audioMetersPosition.load(),avoid);
@@ -152,13 +169,13 @@ struct Playback {
         if(transfer->status!=LIBUSB_TRANSFER_COMPLETED) {++p.transferErrors;p.failed=true;}
         for(int n=0;n<transfer->num_iso_packets;++n)
             if(transfer->iso_packet_desc[n].status!=LIBUSB_TRANSFER_COMPLETED){++p.packetErrors;p.failed=true;}
-        if(!p.failed){uint64_t now=CMTimeConvertScale(CMClockGetTime(CMClockGetHostTimeClock()),1000000000,kCMTimeRoundingMethod_Default).value;p.wireClock.completed(slot.endTick,now);if(p.sink){p.sink->markOutputReady();if(p.premiere&&!p.premiereReady){p.premiereReady=true;puts("Premiere USB ready — enable Mercury Transmit in Premiere Playback settings.");fflush(stdout);}for(auto f:slot.sequences){uint64_t presented=now;p.wireClock.atTick(f.startTick,f.fractionNS,presented);p.sink->played(f.sequence,presented,f.generation);}}}
+        if(!p.failed){uint64_t now=CMTimeConvertScale(CMClockGetTime(CMClockGetHostTimeClock()),1000000000,kCMTimeRoundingMethod_Default).value;p.wireClock.completed(slot.endTick,now);if(p.sink){if(!p.mirror||p.mirror->ready())p.sink->markOutputReady();if(p.premiere&&!p.premiereReady&&(!p.mirror||p.mirror->ready())){p.premiereReady=true;puts("Premiere USB ready — enable Mercury Transmit in Premiere Playback settings.");fflush(stdout);}for(auto f:slot.sequences){uint64_t presented=now;p.wireClock.atTick(f.startTick,f.fractionNS,presented);p.sink->played(f.sequence,presented,f.generation);}}}
         ++p.completed;
         if(!p.stopping && !p.failed && !interrupted && std::chrono::steady_clock::now()<p.end) p.submit(slot);
     }
 };
 int main(int argc,char**argv) {
-    if(argc!=4 || (std::string(argv[1])!="--bars" && std::string(argv[1])!="--play" && std::string(argv[1])!="--loop" && std::string(argv[1])!="--sink" && std::string(argv[1])!="--premiere" && std::string(argv[1])!="--desktop")) { puts("Usage: ShuttlePlayback --bars MODE SECONDS(1-60)\n       ShuttlePlayback --play|--loop MODE MOVIE_FILE\n       ShuttlePlayback --sink|--premiere MODE live\n       ShuttlePlayback --desktop MODE DISPLAY_ID\nClose all Shuttle capture clients first. No firmware writes are sent.");return 64; }
+    if(argc!=4 || (std::string(argv[1])!="--startup" && std::string(argv[1])!="--bars" && std::string(argv[1])!="--play" && std::string(argv[1])!="--loop" && std::string(argv[1])!="--sink" && std::string(argv[1])!="--virtual-sink" && std::string(argv[1])!="--premiere-dual" && std::string(argv[1])!="--premiere" && std::string(argv[1])!="--desktop" && std::string(argv[1])!="--idle")) { puts("Usage: ShuttlePlayback --bars MODE SECONDS(1-60)\n       ShuttlePlayback --play|--loop MODE MOVIE_FILE\n       ShuttlePlayback --sink|--premiere MODE live\n       ShuttlePlayback --desktop MODE DISPLAY_ID\n       ShuttlePlayback --idle MODE live\nClose all Shuttle capture clients first. No firmware writes are sent.");return 64; }
     Playback p;std::string mode=argv[2];
     if(mode=="576i50")p.mode=shuttle_output::Mode::PAL576i50;
     else if(mode=="1080i50")p.mode=shuttle_output::Mode::HD1080i50;
@@ -169,13 +186,18 @@ int main(int argc,char**argv) {
     else return 64;
     CFPreferencesAppSynchronize(CFSTR("local.shuttle.camera"));Boolean exists=false;long sizing=CFPreferencesGetAppIntegerValue(CFSTR("PlaybackSizing"),CFSTR("local.shuttle.camera"),&exists);p.sizing=shuttle_output::sizingValue(exists?sizing:0);
     long connector=CFPreferencesGetAppIntegerValue(CFSTR("OutputConnector"),CFSTR("local.shuttle.camera"),&exists);if(!shuttle_output::connectorSupports(static_cast<shuttle_output::Connector>(exists&&connector>=0&&connector<4?connector:0),unsigned(p.mode))){fprintf(stderr,"Choose PAL or NTSC for S-Video/Composite output.\n");return 64;}
+    p.startup=std::string(argv[1])=="--startup";if(p.startup)p.sizing=shuttle_output::Sizing::Stretch;
     p.idle.reset(new shuttle_idle::Screen(p.mode));
-    p.premiere=std::string(argv[1])=="--premiere";bool isDesktop=std::string(argv[1])=="--desktop",isSink=std::string(argv[1])=="--sink"||p.premiere,isMovie=std::string(argv[1])!="--bars"&&!isSink&&!isDesktop;p.repeat=std::string(argv[1])=="--loop";double seconds=0;
+    p.dualOutput=std::string(argv[1])=="--virtual-sink"||std::string(argv[1])=="--premiere-dual";
+    if(p.dualOutput){try{p.mirror.reset(new shuttle_mirror::Feed(argv[3],false,unsigned(p.mode)));}catch(const std::exception& e){fprintf(stderr,"Simultaneous output: %s\n",e.what());return 65;}}
+    p.premiere=std::string(argv[1])=="--premiere"||std::string(argv[1])=="--premiere-dual";bool isDesktop=std::string(argv[1])=="--desktop",isSink=std::string(argv[1])=="--sink"||p.premiere||p.dualOutput,isMovie=std::string(argv[1])!="--bars"&&std::string(argv[1])!="--idle"&&!isSink&&!isDesktop;p.idleOnly=std::string(argv[1])=="--idle";p.repeat=std::string(argv[1])=="--loop";double seconds=0;
     if(isDesktop){try{char* tail=nullptr;unsigned long id=strtoul(argv[3],&tail,10);if(*tail||!id||id>UINT32_MAX)return 64;p.desktop.reset(new DesktopSource(uint32_t(id),p.mode,p.sizing));p.sinkAudio.reset(new shuttle_output_audio::Reader);}catch(const std::exception& e){fprintf(stderr,"Desktop: %s\n",e.what());return 65;}}
     else if(isMovie) {try {p.filename=argv[3];p.movie.reset(new MovieSource(p.filename,p.mode,p.sizing));seconds=p.movie->duration();}catch(const std::exception& error){fprintf(stderr,"Movie: %s\n",error.what());return 65;}}
-    else if(isSink){try{p.sink.reset(new shuttle_sink::Reader(unsigned(p.mode),false,p.premiere?shuttle_sink::PremierePort:shuttle_sink::Port));p.sinkAudio.reset(new shuttle_output_audio::Reader);shuttle_sink::prepareTimecodeOverlay();int initial=shuttle_output_audio::readLiveAudioOffsetPreference();p.audioOffset.reset(new shuttle_output_audio::LiveAudioOffset(initial,shuttle_output_audio::readLiveAudioOffsetPreference));p.lastAudioOffset=initial;fprintf(stderr,"HDMI timeline audio sync: %+d ms (negative earlier, positive later)\n",initial);}catch(const std::exception& e){fprintf(stderr,"A/V driver: %s. Activate the output driver first.\n",e.what());return 65;}}
+    else if(isSink){try{p.sink.reset(new shuttle_sink::Reader(unsigned(p.mode),false,p.premiere?shuttle_sink::PremierePort:p.dualOutput?shuttle_sink::VirtualPort:shuttle_sink::Port));p.sinkAudio.reset(new shuttle_output_audio::Reader);shuttle_sink::prepareTimecodeOverlay();int initial=shuttle_output_audio::readLiveAudioOffsetPreference();p.audioOffset.reset(new shuttle_output_audio::LiveAudioOffset(initial,shuttle_output_audio::readLiveAudioOffsetPreference));p.lastAudioOffset=initial;fprintf(stderr,"HDMI timeline audio sync: %+d ms (negative earlier, positive later)\n",initial);}catch(const std::exception& e){fprintf(stderr,"A/V driver: %s. Activate the output driver first.\n",e.what());return 65;}}
+    else if(p.idleOnly){}
     else {char* tail=nullptr;long value=strtol(argv[3],&tail,10);if(*tail||value<1||value>60)return 64;seconds=value;}
-    if(!p.audioOffset){try{shuttle_sink::prepareTimecodeOverlay();int initial=shuttle_output_audio::readLiveAudioOffsetPreference();p.audioOffset.reset(new shuttle_output_audio::LiveAudioOffset(initial,shuttle_output_audio::readLiveAudioOffsetPreference));}catch(const std::exception& e){fprintf(stderr,"Output overlays: %s\n",e.what());return 65;}}
+    if(!p.audioOffset&&!p.startup){try{shuttle_sink::prepareTimecodeOverlay();int initial=shuttle_output_audio::readLiveAudioOffsetPreference();p.audioOffset.reset(new shuttle_output_audio::LiveAudioOffset(initial,shuttle_output_audio::readLiveAudioOffsetPreference));}catch(const std::exception& e){fprintf(stderr,"Output overlays: %s\n",e.what());return 65;}}
+    if(!p.startup)p.listening.reset(new shuttle_listen::Output);
     signal(SIGINT,stop);signal(SIGTERM,stop);
     if(shuttleCapturePreflight()!=0) {fputs("Close every Shuttle camera client before output testing.\n",stderr);return 10;}
     libusb_context* ctx=nullptr;if(libusb_init(&ctx))return 1;
@@ -190,11 +212,13 @@ int main(int argc,char**argv) {
     bool useFIFO=getenv("SHUTTLE_DISABLE_FIFO")==nullptr;
     if(useFIFO)p.pollFIFO();
     std::array<Slot,4> slots;
-    p.end=p.repeat||isSink||isDesktop?std::chrono::steady_clock::time_point::max():std::chrono::steady_clock::now()+std::chrono::milliseconds(int64_t(seconds*1000));
+    p.end=p.repeat||isSink||isDesktop||p.idleOnly||p.startup?std::chrono::steady_clock::time_point::max():std::chrono::steady_clock::now()+std::chrono::milliseconds(int64_t(seconds*1000));
     for(auto& slot:slots) {slot.owner=&p;slot.transfer=libusb_alloc_transfer(256);if(!slot.transfer){p.failed=true;break;}if(!p.submit(slot))break;}
-    printf("USB output: %s; %.3f seconds%s; %s\n",mode.c_str(),seconds,p.repeat?" per loop (Stop output to finish)":"",isSink?(p.premiere?"Premiere Mercury Transmit video + Core Audio HDMI stereo":"CMIO timeline video + timestamped HDMI stereo audio"):isDesktop?"Mac desktop mirror + Core Audio HDMI stereo":isMovie?"movie video and stereo audio":"colour bars + moving white block; silent audio");fflush(stdout);
+    printf("USB output: %s; %.3f seconds%s; %s\n",mode.c_str(),seconds,p.repeat?" per loop (Stop output to finish)":"",isSink?(p.premiere?"Premiere Mercury Transmit video + Core Audio HDMI stereo":"CMIO timeline video + timestamped HDMI stereo audio"):isDesktop?"Mac desktop mirror + Core Audio HDMI stereo":isMovie?"movie video and stereo audio":p.idleOnly?"idle screen; silent audio":"colour bars + moving white block; silent audio");fflush(stdout);
     auto lastFIFO=std::chrono::steady_clock::now();
     while(!interrupted&&!p.failed&&std::chrono::steady_clock::now()<p.end) {
+        if((p.dualOutput||p.startup)&&getppid()==1){fputs("Shuttle Video closed; stopping paired output.\n",stderr);p.failed=true;break;}
+        if(p.mirror&&!p.mirror->alive()){fputs("Mac display output disconnected; stopping simultaneous output.\n",stderr);p.failed=true;break;}
         if(p.sink){try{auto profile=shuttle_output::profile(p.mode);p.sink->pump(profile.width,profile.height);if(p.sinkAudio)p.sinkAudio->pump();}catch(const std::exception& e){fprintf(stderr,"A/V driver: %s\n",e.what());p.failed=true;break;}}
         timeval tv{0,p.sink?1000:100000};int eventRC=libusb_handle_events_timeout(ctx,&tv);if(eventRC<0&&eventRC!=LIBUSB_ERROR_INTERRUPTED&&!interrupted){p.failed=true;break;}
         if(useFIFO&&std::chrono::steady_clock::now()-lastFIFO>std::chrono::milliseconds(100)){p.pollFIFO();lastFIFO=std::chrono::steady_clock::now();}
