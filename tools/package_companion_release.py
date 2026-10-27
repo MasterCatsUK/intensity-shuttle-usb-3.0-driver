@@ -63,7 +63,7 @@ def main():
     with zipfile.ZipFile(player_zip) as archive:
         require(archive.testzip() is None, "Damaged Player ZIP")
         for path in player.rglob("*"):
-            if path.is_file():
+            if path.is_file() and path.name != ".DS_Store":
                 name = "Shuttle-Player-0.3.2/" + path.relative_to(player).as_posix()
                 require(hashlib.sha256(archive.read(name)).hexdigest() == digest(path),
                         f"Player ZIP differs from verified folder: {name}")
@@ -83,8 +83,9 @@ def main():
     complete.mkdir()
     shutil.copy2(pkg, complete / "Shuttle-Video-0.1.54.pkg")
     shutil.copy2(source_zip, complete / source_zip.name)
-    shutil.copytree(app, complete / app.name)
-    shutil.copytree(ROOT / "docs", complete / "docs")
+    ignore_metadata = shutil.ignore_patterns(".DS_Store", "__pycache__")
+    shutil.copytree(app, complete / app.name, ignore=ignore_metadata)
+    shutil.copytree(ROOT / "docs", complete / "docs", ignore=ignore_metadata)
     (complete / "player").mkdir()
     for name in ("README.md", "Read Me.html", "COPYING", "THIRD-PARTY-NOTICES.md",
                  "VALIDATION.md", "CHANGELOG.md"):
