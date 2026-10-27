@@ -1,4 +1,4 @@
-# Build and modify Shuttle Camera
+# Build and modify Shuttle Video + Shuttle Player
 
 Run commands from the repository root. Adobe SDK files are obtained separately.
 
@@ -67,3 +67,17 @@ For a normal public release, use the appropriate Developer ID signing/entitlemen
 ## Rebuild the guide
 
 The optional guide generator is `docs/source/build_readme.py`; it writes to `user-guide` using its included screenshots. It needs Python packages reportlab and Pillow; it is not needed to build the app. Use a Python virtual environment if installing those packages. PDF rendering/QA used Poppler; PDF extraction checks used pypdf.
+
+## Build the separate Shuttle Player
+
+From the repository root:
+
+```sh
+cd player
+./build.sh
+./tests/run.sh
+```
+
+Player builds independently of the main app and Adobe SDK. It targets macOS 13+, producing arm64/x86_64 slices; Intel and older macOS runtime remain untested. Its script verifies pinned inputs in `vendor/web-tools/SHA256.json`, builds QuickJS and the minimal LGPL FFmpeg for both architectures and packages the official standalone yt-dlp helper. These inputs, licences and build recipes are included in the repository and release source. No Homebrew or Python installation is required by Player users; Python 3 and Apple build tools are needed to build/test. See [Player build and validation details](../player/README.md). The main installer build above does not build or install Player.
+
+The combined companion release is assembled by `tools/package_companion_release.py` from an existing verified main installer and Player release folder. Run it with `--help` for arguments. It archives the exact clean repository commit; it does not rebuild, install, sign with Developer ID, publish or modify drivers.

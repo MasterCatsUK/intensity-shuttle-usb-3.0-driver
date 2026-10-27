@@ -1,6 +1,7 @@
 // GPL-2.0-or-later. Shuttle Player, 19 October 2026.
 #pragma once
 #include "MovieSource.hpp"
+#include "StreamingSource.hpp"
 #include "PlayerIPC.hpp"
 #include <sstream>
 #include <limits>
@@ -11,17 +12,20 @@ namespace player {
 class Engine {
     std::string filename;shuttle_output::Mode mode;shuttle_output::Sizing sizing;
     std::unique_ptr<MovieSource> movie;
+    std::unique_ptr<StreamingSource> stream;bool streamingMode=false,streamNeedsFrame=false;int streamState=-1;uint64_t streamReport=0;
     std::vector<uint8_t> held;
     std::unique_ptr<Preview> previewScratch;
     uint64_t mediaFrame=0,heldFrame=0;double requestedSeek=-1;
     float gain=1;bool hasHeld=false,asyncSeek=false;
     struct SeekResult {std::unique_ptr<MovieSource> movie;std::vector<uint8_t> picture;std::vector<int32_t> audio;uint64_t frame;};
     std::future<SeekResult> pendingSeek;
+    struct StreamSeekResult {std::unique_ptr<StreamingSource> source;uint64_t frame;};
+    std::future<StreamSeekResult> pendingStreamSeek;
 public:
     bool paused=false,ended=false,loop=false,stopping=false;
     double duration=0;uint64_t generation=0;
-    Engine(const std::string& file,shuttle_output::Mode m,shuttle_output::Sizing s,bool asynchronous=false):filename(file),mode(m),sizing(s),asyncSeek(asynchronous){
-        movie.reset(new MovieSource(file,mode,sizing));duration=movie->duration();previewScratch.reset(new Preview{});
+    Engine(const std::string& file,shuttle_output::Mode m,shuttle_output::Sizing s,bool asynchronous=false,bool streaming=false):filename(file),mode(m),sizing(s),asyncSeek(asynchronous){
+        streamingMode=streaming;if(streaming){stream.reset(new StreamingSource(file,mode,sizing));duration=stream->duration();}else {movie.reset(new MovieSource(file,mode,sizing));duration=movie->duration();}previewScratch.reset(new Preview{});
     }
     double rate()const{auto p=shuttle_output::profile(mode);return double(p.rateNom)/p.rateDen;}
     double position()const{return hasHeld?std::min(duration,double(heldFrame)/rate()):0;}
@@ -29,13 +33,44 @@ public:
         std::istringstream in(line);std::string key,extra;double value=0;in>>key;
         if(key=="stop"){if(!(in>>extra))stopping=true;return;}
         if(!(in>>value)||!std::isfinite(value)||(in>>extra))return;
+        if(streamingMode&&key=="loop")return;
         if(key=="pause"){paused=value!=0;if(!paused&&ended){requestedSeek=0;ended=false;}}
-        else if(key=="seek")requestedSeek=std::max(0.0,std::min(duration,value));
+        else if(key=="seek"){requestedSeek=std::max(0.0,std::min(duration,value));if(streamingMode)ended=false;}
         else if(key=="volume")gain=float(std::max(0.0,std::min(1.0,value)));
         else if(key=="loop")loop=value!=0;
     }
     void render(uint64_t wireFrame,std::vector<uint8_t>& picture,std::vector<int32_t>& pcm){
-        auto p=shuttle_output::profile(mode);const uint64_t count=std::max<uint64_t>(1,uint64_t(std::ceil(duration*rate())));
+        auto p=shuttle_output::profile(mode);
+        if(streamingMode){
+            if(pendingStreamSeek.valid()&&pendingStreamSeek.wait_for(std::chrono::seconds(0))==std::future_status::ready){
+                auto result=pendingStreamSeek.get();stream=std::move(result.source);
+                if(requestedSeek<0){mediaFrame=result.frame;streamNeedsFrame=true;ended=false;}
+            }
+            if(requestedSeek>=0&&!pendingStreamSeek.valid()){
+                const uint64_t count=std::max<uint64_t>(1,uint64_t(std::ceil(duration*rate())));
+                uint64_t target=std::min(count-1,uint64_t(std::floor(requestedSeek*rate())));auto file=filename;auto m=mode;auto size=sizing;double seconds=double(target)/rate();
+                // Only this background task retires the old decoder. USB keeps held picture/silence.
+                pendingStreamSeek=std::async(std::launch::async,[old=std::move(stream),file,m,size,seconds,target]()mutable{
+                    StreamSeekResult result;result.frame=target;result.source.reset(new StreamingSource(file,m,size,seconds));old.reset();return result;
+                });
+                requestedSeek=-1;ended=false;streamNeedsFrame=true;streamState=4;
+                printf("STREAM_SEEKING %.9f\n",seconds);fflush(stdout);
+            }
+            StreamingSource::State state;
+            if(pendingStreamSeek.valid()){pcm.clear();}
+            else {
+                state=stream->read(paused&&!streamNeedsFrame,mediaFrame,held,pcm);
+                if(state.advanced){heldFrame=mediaFrame++;hasHeld=true;if(streamNeedsFrame){streamNeedsFrame=false;printf("STREAM_SEEKED %.9f %llu\n",double(heldFrame)/rate(),(unsigned long long)(generation+1));fflush(stdout);}}
+                ended=state.ended;if(ended&&streamNeedsFrame){streamNeedsFrame=false;printf("STREAM_SEEK_EMPTY %.9f %llu\n",double(mediaFrame)/rate(),(unsigned long long)(generation+1));fflush(stdout);}
+                int status=ended?3:state.buffering?0:paused?2:1;
+                if(status!=streamState||(status==0&&wireFrame-streamReport>=uint64_t(rate()/2))){
+                    if(status==0)printf("STREAM_BUFFER %.3f video=%.3f audio=%.3f\n",state.buffered,state.videoSeconds,state.audioSeconds);else puts(status==1?"STREAM_PLAYING":status==2?"STREAM_PAUSED":"STREAM_ENDED");fflush(stdout);streamState=status;streamReport=wireFrame;
+                }
+            }
+            if(held.empty()){held.resize(size_t(p.width)*p.height*2);for(size_t n=0;n<held.size();n+=4){held[n]=held[n+2]=128;held[n+1]=held[n+3]=16;}}
+            picture=held;pcm.resize(p.audioFrames(wireFrame)*8,0);if(!state.advanced||paused)std::fill(pcm.begin(),pcm.end(),0);else if(gain!=1)for(auto& sample:pcm)sample=int32_t(double(sample)*gain);++generation;return;
+        }
+        const uint64_t count=std::max<uint64_t>(1,uint64_t(std::ceil(duration*rate())));
         bool fresh=false,waiting=false;
         if(pendingSeek.valid()&&pendingSeek.wait_for(std::chrono::seconds(0))==std::future_status::ready){
             auto result=pendingSeek.get();

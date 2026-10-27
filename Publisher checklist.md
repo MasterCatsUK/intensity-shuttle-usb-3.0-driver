@@ -8,4 +8,4 @@ The local installer works on the tested setup, but that is not the same as a dis
 4. Keep complete corresponding GPL/LGPL source, licence notices and exact build/version information available with binary distribution. Do not include Adobe's proprietary SDK headers in the public source archive.
 5. Provide a support/contact route, known-issues list and checksums through a trusted distribution channel. Review screenshots/logs for private data. Do not claim endorsement by Apple, Adobe or Blackmagic Design.
 
-The earlier source is already public. This0.1.39 update folder, installer assets and refreshed guide were prepared locally and have not been uploaded automatically.
+The repository and experimental releases are public. The current companion release combines unchanged Shuttle Video 0.1.54 with Shuttle Player 0.3.2; retain the limits above and the separate helper licences and source materials under player/. A Latest label is not distribution qualification.

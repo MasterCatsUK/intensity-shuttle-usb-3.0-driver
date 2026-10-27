@@ -19,3 +19,7 @@ Apple, Adobe, Final Cut Pro, Premiere Pro, Blackmagic Design and Intensity Shutt
 ## Startup media
 
 `unified/resources/Startup.m4v` is the Shuttle Video logo movie supplied by Andrew for this project and its public distribution. Only that exported movie is included; no Final Cut library, unrelated test footage or project media is distributed. The original file is retained unchanged.
+
+## Shuttle Player web-video helpers
+
+Player 0.3.2 bundles separate pinned yt-dlp, QuickJS and LGPL FFmpeg executables. Complete helper sources/input archives, hashes and build recipes are under `player/vendor/web-tools/` and `player/tools/build_web_tools.sh`; full notices are under `player/resources/Web-Licences/`. The standalone yt-dlp executable contains third-party components with separate terms, including GPLv3+; do not apply the project GPLv2 label to every helper. See [Player third-party notices](player/THIRD-PARTY-NOTICES.md) for versions, licences and source references. Preserve all notices and corresponding-source/relinking materials with redistributions. No site movies, cookies or credentials are included.

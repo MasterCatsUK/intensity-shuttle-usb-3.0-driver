@@ -1,0 +1,4 @@
+// GPL-2.0-or-later. Explicit prepared-file playback check, no USB.
+#include "../src/PlayerEngine.hpp"
+#include <cassert>
+int main(int argc,char**argv){@autoreleasepool{for(int n=1;n<argc;n++){player::Engine engine(argv[n],shuttle_output::Mode::HD1080p25,shuttle_output::Sizing::Stretch);assert(engine.duration>0);std::vector<uint8_t> picture;std::vector<int32_t> pcm;engine.render(0,picture,pcm);assert(picture.size()==1920*1080*2&&pcm.size()==1920*8);engine.command("seek 3");engine.render(1,picture,pcm);assert(engine.position()>=2.9&&picture.size()==1920*1080*2);engine.command("pause 1");auto held=picture;engine.render(2,picture,pcm);assert(picture==held);for(auto sample:pcm)assert(sample==0);puts("PASS prepared site movie: native Player decode, stereo packet size, seek and paused hold; no USB");}}}

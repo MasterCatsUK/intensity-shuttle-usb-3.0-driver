@@ -1,22 +1,52 @@
 <img src="unified/resources/AppIcon.png" width="128" alt="Shuttle Video SVHS cassette icon">
 
-# Shuttle Video
+# Shuttle Video + Shuttle Player
 
 Capture VHS, record with a choice of codecs, play movies and monitor editing timelines on an Intensity Shuttle USB 3.0 or a chosen Mac display.
 
-**0.1.54 development build.** Formerly Shuttle Camera. Independent community project; not affiliated with Blackmagic Design, Apple or Adobe.
+**Shuttle Video 0.1.54 + Shuttle Player 0.3.2 — experimental development release.** Capture, editor monitoring and movie/web-video playback in one project. Shuttle Video was formerly Shuttle Camera. Independent community project; not affiliated with Blackmagic Design, Apple, Adobe or the supported video sites.
 
-[Download 0.1.54](https://github.com/andrewvideo/intensity-shuttle-usb-3.0/releases/tag/v0.1.54) · [What’s new](docs/Whats-New-0.1.54.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md)
+[Download both apps](https://github.com/andrewvideo/intensity-shuttle-usb-3.0/releases/tag/v0.1.54-player-0.3.2) · [What’s new](docs/Whats-New-Player-0.3.2.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md)
 
 > The installer is unsigned, components are ad-hoc signed and not notarized, and the development extensions require SIP disabled. This weakens macOS protection. Read the [security preparation and restoration instructions](docs/user-guide/Read%20Me.md#security-preparation) before installing. The installer never changes security settings. macOS 14.4+ is the build target; Apple silicon is the tested platform. Intel binaries are included but Intel/older macOS runtime is untested.
 
-## Startup logo and Shuttle Player
+## Two apps, one download
+
+| App | Use it for |
+|---|---|
+| **Shuttle Video 0.1.54** | VHS capture, picture controls, Final Cut/Premiere monitoring, scopes and desktop output. |
+| **Shuttle Player 0.3.2** | Local movies and public YouTube, Dailymotion or Vimeo videos through the Shuttle, with playback controls and Stretch. |
+
+The **Complete ZIP** contains the full **Shuttle Video 0.1.54 installer**, **Shuttle Player.app**, illustrated guides and the complete matching source ZIP. Install the main package for capture/editor features; copy Player to Applications separately. The installer does not install Player. Existing 0.1.54 users only need to replace Player; the main app, drivers and editor plug-ins are unchanged. Both apps are developed here: [main source](docs/BUILDING.md) and [Player source/build instructions](player/README.md).
+
+## Play web videos through the Shuttle
+
+In **Shuttle Player**, select your connection and output format, then choose **File → Open Video URL… (⇧⌘O)**. Paste a YouTube, Dailymotion or Vimeo link and choose **Open and Play**. The URL box opens from the File menu only.
+
+| Method | When to use it | Controls |
+|---|---|---|
+| **Download first** | Prepares the whole video before playback. Best for reliable seeking, looping and replay. | Play/Pause, Stop, scrub, ±10 seconds, Loop and volume. |
+| **Stream** | Starts after about three seconds of picture/audio buffering, while the rest arrives. Site lookup adds startup time. | Play/Pause, Stop, scrub, ±10 seconds and volume. Use Download first for Loop. |
+
+**Stream and scrub:** drag the slider and release to jump, or use the ten-second skip buttons. Picture holds with silence while the new position buffers; a paused seek stays paused and a playing seek resumes. Expect a short wait after a jump. Buffering progress is shown. The updated YouTube reader uses bounded requests to reduce repeated rebuffering; a slow connection can still stall. Reopen the original URL if a stream link expires.
+
+Picture and stereo sound go directly to the Shuttle, with **Stretch** selected by default; Fit and Fill are available. Player initially uses Shuttle Video’s saved PAL/NTSC/output connection. Local movies use **File → Open Video… (⌘O)** and wait for Play. Stop releases USB. Capture and physical playback share one device, so close other camera/editor output clients first.
+
+![Shuttle Player transport, scrub bar and output controls](player/docs/Shuttle-Player.png)
+
+*Actual Player controls with an original synthetic test movie. The screenshot illustrates local playback; web playback uses the same transport.*
+
+Only compatible **public on-demand** videos are supported. Sign-in/password-only videos, DRM, live/upcoming broadcasts and every possible site format are outside support. No browser cookies or account credentials are read. Use videos you have permission to play. Download first caches its prepared movie until replacement or normal quit; Stream keeps a bounded RAM buffer rather than the whole movie. No user Homebrew/Python installation is needed. [Player guide and limits](player/README.md) · [Test results](player/VALIDATION.md).
+
+Player is ad-hoc signed and not notarized, targets macOS 13+, and includes both architectures; Intel/older macOS runtime is untested. Replacing Player does not change drivers or security settings. Software tests cover public-site decoding/seeking, sync fixtures and sustained delivery; the new 0.3.2 streaming seek workflow still needs a physical HDMI user check. Earlier local-file HDMI playback and basic 0.3.0 URL output were user-confirmed. This is experimental software, not a guarantee that every link or Mac works.
+
+## Startup logo
 
 Opening Shuttle Video plays the bundled **5.64-second startup movie** on an idle Shuttle at the saved output format, stretched to the output frame, then **holds its final logo**. Any app control/menu action stops the startup sender and waits for USB release before continuing. The movie’s sound goes to the Shuttle; it is silent after the end. No Mac sound route is changed. Busy capture/output is left alone. Turn off **Idle Settings → Play startup video on Shuttle** to disable it next time.
 
 ![Startup movie final frame](docs/images54/startup.png)
 
-The release also includes the separate **Shuttle Player 0.1.1** app and its source in [player/](player/README.md): movie playback, centred icon controls, scrubbing, Loop, listening volume and Stretch. It uses the main app’s saved output format/connection initially. Copy Shuttle Player to Applications; the Shuttle Video installer installs the main app, drivers and Premiere plug-in. [0.1.54 instructions](docs/Whats-New-0.1.54.md).
+The main app’s startup behaviour is unchanged in this companion release. [Shuttle Video 0.1.54 instructions](docs/Whats-New-0.1.54.md).
 
 ## Fullscreen Mac monitor
 

@@ -1,3 +1,52 @@
+# Shuttle Player 0.3.2 — 27 October 2026
+
+Streaming seeking is enabled, with commit on slider release, ±10-second skips, retained paused/playing state and replay. FFmpeg accurate input seeking applies the target to each selected input. Old decoder retirement/new startup run in a background future; pending requests coalesce, USB holds last pixels with silence, and preview generation acknowledgements suppress old-position updates. The0.3.1 bounded YouTube fetch remains intact. During seek overlap, two bounded decoder buffers can coexist temporarily. No driver/packet/security changes. Stream Loop remains disabled; on-demand public videos only.
+
+Actual tests: HD25 and fractional NTSC synthetic flashes/beeps verify forward/backward paused/playing seeks, latest-request-wins, PCM/cadence, EOF/replay, held pixels/silence during asynchronous waits, bounded renderer calls and Stop during seek cleanup. Separate video/audio input seeking is included. Public probes use YouTube Ab1Lh_T0gA0, Dailymotion x5kesuj and Vimeo1084537 at1080p25: jumps to60s, back10s, paused120s, then resume all yield video/stereo sound; observed3–4s per jump including buffer/retirement. No full movie cache or USB is used by probes. Physical TV/control usability needs the user's check; Intel/older macOS remain untested.
+
+Full offline regression suite passed:18local-file cases,9streaming mode/scaling/silent cases, controlled starvation/early audio/cancellation/error tests, native Engine controls/IPC, TLS rejection and bounded HTTP transport. New seek test covers HD25 combined input and fractional NTSC separate video/audio inputs, empty end-of-video targets, explicit seek immediately followed by Play after EOF, replay and Stop while a seek is pending. Maximum observed render calls remained about1.2ms in these probes (not a full USB timing benchmark). Native UI checks enabled scrub/skip, disabled Stream Loop, stale acknowledgement rejection and end-seek acknowledgement. An additional30seconds of real-time playback after seeking on the user's YouTube link had zero held/rebuffer ticks. Universal7program build/deep signatures and release manifest/source/ZIP checks completed before delivery. No web clips, signed URLs or test logs distributed.
+
+# Shuttle Player 0.3.1 — 27 October 2026
+
+User reported repeated stops that resume after buffering on YouTube Ab1Lh_T0gA0. Live log confirmed recurring STREAM_BUFFER/STREAM_PLAYING at steady USB/preview cadence, with no decoder errors. Bounded 1 MiB range probe to its CDN returned HTTP206 at about7.8MB/s; unbounded decoder reads were not maintaining playback. FFmpeg8.1.3 adds request_size; YouTube media requests now use1MiB plus matching short_seek_size and persistent connections. TLS verification remains explicitly enabled. Same3-second paired buffer/memory caps; no driver/USB scheduler changes.
+
+Sustained real-time check: YouTube Ab1Lh_T0gA0 played120seconds/3000frames at1080p25 with stereo audio, zero rebuffer events after startup, and the video queue staying at its4-second cap. Initial resolver/buffer time was7.59seconds on this connection. Decoder remained bounded; no full movie file was created. This was a software-to-frame/PCM probe, not a new physical TV check.
+
+Deterministic HTTP test: complete MOV demux through a local server that rejects open-ended requests and ranges above1MiB; six bounded requests succeeded. The full offline suite passes:18local-file cases,9stream-decoder cases, starvation/short-audio/cancel/error recovery, native Engine controls/IPC, UI, TLS rejection and bounded-range transport. Dailymotion and Vimeo each decode1501080p frames with stereo using the updated helper. Download first rechecked on YouTube, yielding readable video/audio tracks. Upstream FFmpeg8.1.3 source/signature and pinned SHA256 included; both architectures built from that version with the same LGPL configuration. No GPL/nonfree components enabled. Human TV check of updated build still needed; earlier0.3.0 streaming basic picture/sound was user-confirmed but frequently rebuffered.
+
+# Shuttle Player 0.3.0 — 27 October 2026
+
+New Stream method, alongside unchanged default Download first and local-file decoding. Three-second paired audio/video startup/refill buffer; decoded video queue capped at four seconds and PCM capped at eight seconds. FIFO readers and supervised FFmpeg are outside the USB callback; render only consumes ready data, holds picture/silence on starvation and preserves media position. Original wire packet/FIFO/transfer scheduler unchanged. Decoder output is scaled UYVY plus 48 kHz stereo PCM, aligned by output cadence. Stream disables seek/skip/Loop; actual live broadcasts remain rejected.
+
+Completed checks:
+
+- Existing 18 local-file mode/scaling cases, AVFoundation seeking/pause/loop/gain, asynchronous seek, preview cadence and worker cancellation regressions pass.
+- Nine real streaming decoder cases: all six PAL/NTSC SD/1080 modes, plus Fit, Fill and no-audio input. Checks include aligned synthetic flash/beep frames, exact stereo packet cadence, pause/hold/silence, end-of-file and bounded renderer reads (about 0.1 ms or less in this fixture run; not a complete USB timing benchmark).
+- A controlled producer stalls after 3.2 seconds: buffer starvation holds exact pixels with silence, refill resumes paired data without losing frames, and stopping during a stall closes the decoder/pipes. A shorter audio track pads silence without deadlock; failed decoder exits cleanly. Real streaming Engine checks seek/Loop disabled, gain/mute, pause/resume, EOF hold, Stop and preview IPC.
+- Native UI checks normal startup without a URL dialog, method choices, stream seek/skip/Loop disabled, split buffering messages and progress reset. Metadata checks include selected audio formats without a named codec (Vimeo), allowed public stream URLs, header filtering, live/invalid metadata rejection and private config creation.
+- Public-site probes each decoded 150 1080p25 frames with stereo audio, using a three-second initial buffer and no complete-movie cache: YouTube “Me at the zoo” (first frame 4.79 s including lookup), Dailymotion “Office Christmas Party Review” (1.78 s), Vimeo “Big Buck Bunny” (4.03 s). These are observations on this connection, not startup guarantees. Decoder processes were cancelled after the probe and successful test caches removed.
+- HTTPS certificate verification is explicitly enabled for each streaming input; public-site probes above pass with it enabled. An ephemeral localhost HTTPS server with an untrusted certificate is rejected before any HTTP request. No trust store or system security changes.
+- Download first rechecked with the YouTube example: readable MP4 with one video and one audio track. Actual native Player decode, seek and pause are covered by both the movie regression suite and prepared-file probe.
+- Universal arm64/x86_64 build, ad-hoc deep signatures and release manifest/ZIP checks. No downloaded site clips, signed stream URLs, logs or raw buffers distributed.
+
+ New live HDMI picture/sound/user controls remain pending. Intel/older macOS runtime untested. No GitHub publication, drivers, permissions or security changes.
+
+# Shuttle Player 0.2.1 — 27 October 2026
+
+Download progress parsing checked for percentages, unavailable/malformed/out-of-range values, and merge phase. AppKit checks normal startup with no URL sheet, progress hidden when idle, determinate download percentage, animated preparation, and progress hidden after job ends. Existing URL lifecycle/cancellation and playback regressions retained. No playback engine, drivers, security settings or GitHub changes. New URL-to-HDMI human check remains pending.
+
+# Shuttle Player0.2.0 validation — 27 October2026
+
+New File→Open Video URL (Shift–Command–O), normal Edit/Paste menu, background preparation/progress/Cancel, automatic Play after a valid prepared MP4. Existing HDMI engine and its timing/volume/scaling/preview ring are unchanged; main Shuttle Video54, drivers and editor plug-ins are not updated.
+
+Checks: fake-task URL/arguments/stream lifecycle test covers supported domains and short links, safe public Vimeo player normalization/unlisted hash retention, rejected schemes/credential/lookalike hosts/ports, literal argument passing after --, split UTF-8/JSON/progress, EOF vs process-exit ordering, one completion, path containment, cancel/launch/error cache cleanup. Native worker test verifies own process-group and descendant cancellation, normal exit status, no unrelated process termination. Existing18real movie/mode/scaling engine tests, rapid async seeking, preview-clock and headless AppKit menu/shortcut/initial no-network/no-USB state pass.
+
+Live preparation with the same loader/worker/tools: YouTube jNQXAC9IVRw (“Me at the zoo”,18.933s), Dailymotion x5kesuj (“Office Christmas Party Review”,186.8s), Vimeo1084537 (“Big Buck Bunny”,596.479s) all yielded MP4 with one video and one audio track. Actual Player Engine decoded each, sought forward, and held exact paused pixels with silence without USB. A separate protected Vimeo example76979871 failed as expected; no cookies, login or decryption workaround was attempted. Site movies/test caches are excluded from all release/source packages.
+
+Helpers pinned/hashes verified: yt-dlp2026.10.26 official universal executable/source+notices, locally built universal QuickJS2026-06-04 and minimal LGPLFFmpeg8.0.1 with network disabled. Seven executables (host, output, worker, yt-dlp, qjs, ffmpeg, ffprobe) are universal arm64/x86_64 with macOS13 or earlier load minimum; the app targets13. Deep signatures and release source/ZIP/manifests are checked at packaging. Intel/older macOS runtime remains untested.
+
+New URL workflow still requires the user's live HDMI picture/sound/transport check. Prior Player0.1.1 local-file HDMI and smooth preview were user-confirmed. Site changes, regions/login/DRM/live content and unavailable compatible formats can fail; no universal site-compatibility guarantee is made. Public on-demand videos only; one video at a time, playlists limited to first item. App is ad-hoc signed, not notarized. No security/driver settings or GitHub releases changed. Earlier local-file validation follows.
+
 # Shuttle Player 0.1.1 validation — 19 October 2026
 
 - User reported TV playback was perfect but the app preview was choppy. Confirmed cause: preview publication only every fifth frame and 10 Hz UI polling.

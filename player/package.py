@@ -3,12 +3,12 @@
 from pathlib import Path
 import shutil, subprocess, hashlib, zipfile, sys
 root=Path(__file__).resolve().parent
-out=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else root.parent.parent/'outputs'/'Shuttle-Player-0.1.1'
+out=Path(sys.argv[1]).resolve() if len(sys.argv)>1 else root.parent.parent/'outputs'/'Shuttle-Player-0.3.2'
 if out.exists(): raise SystemExit(f'Refusing to overwrite an existing release: {out}')
 out.mkdir(parents=True)
 app=out/'Shuttle Player.app';shutil.copytree(root/'build'/'Shuttle Player.app',app)
 source=out/'Source';source.mkdir()
-for name in ['src','resources','vendor','tests','docs']:
+for name in ['src','resources','vendor','tests','docs','tools']:
     shutil.copytree(root/name,source/name)
 for name in ['build.sh','package.py','README.md','Read Me.html','COPYING','THIRD-PARTY-NOTICES.md','VALIDATION.md','CHANGELOG.md','.gitignore']:
     shutil.copy2(root/name,source/name)
@@ -20,7 +20,7 @@ for name in ['Read Me.html','COPYING','THIRD-PARTY-NOTICES.md']:
     shutil.copy2(root/name,resources/name)
 shutil.copytree(root/'docs',resources/'docs',dirs_exist_ok=True)
 shutil.copy2(root/'build'/'tests'/'Player-Output-Test.mov',out/'Player-Output-Test.mov')
-(out/'Bundle with Shuttle Camera later.md').write_text('''# Future combined release\n\nInclude Shuttle Player.app as a separate application alongside Shuttle Camera.app in the next installer. Keep bundle ID local.shuttle.player and a separate executable; do not embed a second camera or audio driver. Include this guide, source, notices and source dependency archive. Update the installer exact-payload checks and release manifest for both apps.\n\nPlayer already contains arm64 and x86_64 slices. Shuttle Camera 0.1.47 remains Apple-silicon/macOS27-only; its planned Intel port and installer eligibility checks are separate unfinished work. Do not advertise the existing Camera installer as Intel-compatible.\n\nPlay requests a normal quit of Shuttle Camera and waits for its recorder/output cleanup. It leaves third-party recording apps alone; those still need closing to release the device. Keep that handover documented. No GitHub upload has been performed.\n''')
+(out/'Install.txt').write_text('Shuttle Player0.3.2: copy Shuttle Player.app to Applications. Open File > Open Video URL, paste a YouTube/Dailymotion/Vimeo link, choose Download first or Stream, then Open and Play. Stream supports scrub and ten-second skips, briefly buffering after each jump; Loop uses Download first. Choose HDMI and the required format first. Existing local-file and Stretch controls remain. No main-app/driver install or reactivation. This app is ad-hoc signed, not notarized. Intel/older macOS runtime untested. Source, pinned helper inputs/build scripts and all licences are included. No cached site videos are distributed.\n')
 subprocess.run(['codesign','--force','--sign','-',str(app)],check=True)
 subprocess.run(['codesign','--verify','--deep','--strict',str(app)],check=True)
 files=sorted(p for p in out.rglob('*') if p.is_file())

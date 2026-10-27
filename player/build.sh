@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export SDKROOT="$(xcrun --show-sdk-path)"
+./tools/build_web_tools.sh
 app='build/Shuttle Player.app'
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 for arch in arm64 x86_64; do
@@ -18,13 +19,17 @@ for arch in arm64 x86_64; do
           touch .player-macos13)
     fi
     flags=(-arch "$arch" -std=c++14 -O2 -fobjc-arc -Wno-deprecated-declarations -Werror=unguarded-availability-new -mmacosx-version-min=13.0)
-    xcrun clang++ "${flags[@]}" src/PlayerOutput.mm src/MovieSource.mm src/CaptureGuard.mm -I"$root/libusb" "$root/libusb/.libs/libusb-1.0.a" \
+    xcrun clang++ "${flags[@]}" src/PlayerOutput.mm src/MovieSource.mm src/StreamingSource.mm src/CaptureGuard.mm -I"$root/libusb" "$root/libusb/.libs/libusb-1.0.a" \
       -framework Foundation -framework AVFoundation -framework CoreMediaIO -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework IOKit -framework Security -o "build/$arch/ShuttlePlayerOutput"
     xcrun clang++ "${flags[@]}" src/PlayerHost.mm -framework Cocoa -framework AVFoundation -framework UniformTypeIdentifiers -framework CoreMedia -o "build/$arch/ShuttlePlayer"
+    xcrun clang++ -arch "$arch" -std=c++14 -O2 -mmacosx-version-min=13.0 src/WebVideoWorker.cpp -o "build/$arch/ShuttleWebWorker"
 done
-for bin in ShuttlePlayer ShuttlePlayerOutput; do
+for bin in ShuttlePlayer ShuttlePlayerOutput ShuttleWebWorker; do
     lipo -create "build/arm64/$bin" "build/x86_64/$bin" -output "$app/Contents/MacOS/$bin"
 done
+mkdir -p "$app/Contents/MacOS/WebTools" "$app/Contents/Resources/Web-Licences"
+cp build/web-tools/* "$app/Contents/MacOS/WebTools/"
+cp resources/Web-Licences/* "$app/Contents/Resources/Web-Licences/"
 cp resources/AppIcon.icns COPYING THIRD-PARTY-NOTICES.md 'Read Me.html' "$app/Contents/Resources/"
 mkdir -p "$app/Contents/Resources/docs"
 cp docs/Shuttle-Player.png "$app/Contents/Resources/docs/"
@@ -32,9 +37,10 @@ python3 - "$app" <<'PY'
 from pathlib import Path
 import plistlib,sys
 p=Path(sys.argv[1])/'Contents/Info.plist'
-p.write_bytes(plistlib.dumps(dict(CFBundleIdentifier='local.shuttle.player',CFBundleName='Shuttle Player',CFBundleDisplayName='Shuttle Player',CFBundleExecutable='ShuttlePlayer',CFBundlePackageType='APPL',CFBundleShortVersionString='0.1.1',CFBundleVersion='2',CFBundleIconFile='AppIcon.icns',LSMinimumSystemVersion='13.0',NSHighResolutionCapable=True,NSPrincipalClass='NSApplication')))
+p.write_bytes(plistlib.dumps(dict(CFBundleIdentifier='local.shuttle.player',CFBundleName='Shuttle Player',CFBundleDisplayName='Shuttle Player',CFBundleExecutable='ShuttlePlayer',CFBundlePackageType='APPL',CFBundleShortVersionString='0.3.2',CFBundleVersion='7',CFBundleIconFile='AppIcon.icns',LSMinimumSystemVersion='13.0',NSHighResolutionCapable=True,NSPrincipalClass='NSApplication')))
 PY
-codesign --force --sign - "$app/Contents/MacOS/ShuttlePlayerOutput"
+for bin in ShuttlePlayerOutput ShuttleWebWorker; do codesign --force --sign - "$app/Contents/MacOS/$bin"; done
+for bin in "$app/Contents/MacOS/WebTools/"*; do codesign --force --sign - "$bin"; done
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 lipo -info "$app/Contents/MacOS/ShuttlePlayer"

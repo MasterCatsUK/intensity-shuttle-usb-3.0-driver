@@ -87,14 +87,14 @@ struct Playback {
     }
 };
 int main(int argc,char**argv){@autoreleasepool{
-    if(argc!=6){fputs("Usage: ShuttlePlayerOutput MODE MOVIE FIT(0-2) PREVIEW VOLUME(0-1)\n",stderr);return 64;}
+    if(argc!=6&&!(argc==7&&std::string(argv[6])=="--stream")){fputs("Usage: ShuttlePlayerOutput MODE MOVIE FIT(0-2) PREVIEW VOLUME(0-1) [--stream]\n",stderr);return 64;}
     signal(SIGINT,stop);signal(SIGTERM,stop);signal(SIGPIPE,SIG_IGN);
     Playback p;std::string mode=argv[1];
     const char* modes[]={"576i50","1080i50","1080p25","480i5994","1080i5994","1080p2997"};
     int index=-1;for(int n=0;n<6;++n)if(mode==modes[n])index=n;if(index<0)return 64;p.mode=shuttle_output::Mode(index);
     try{
         p.preview.reset(new player::Mapping(argv[4],false));
-        p.engine.reset(new player::Engine(argv[2],p.mode,shuttle_output::sizingValue(strtol(argv[3],nullptr,10)),true));
+        p.engine.reset(new player::Engine(argv[2],p.mode,shuttle_output::sizingValue(strtol(argv[3],nullptr,10)),true,argc==7));
         p.engine->command(std::string("volume ")+argv[5]);p.engine->paused=true;
     }catch(const std::exception& e){fprintf(stderr,"%s\n",e.what());return 65;}
     if(shuttleCapturePreflight()!=0){fputs("Stop capture and close camera previews before playing.\n",stderr);return 10;}
