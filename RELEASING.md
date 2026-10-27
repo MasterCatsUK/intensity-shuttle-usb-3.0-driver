@@ -1,6 +1,6 @@
 # Combined companion release
 
-Repository: https://github.com/andrewvideo/intensity-shuttle-usb-3.0
+Repository: https://github.com/MasterCatsUK/intensity-shuttle-usb-3.0-driver
 
 Current release: **Shuttle Video 0.1.54 + Shuttle Player 0.3.2**, tag `v0.1.54-player-0.3.2`. Main installer and drivers are unchanged. Do not relabel or replace the historical `v0.1.54` source/installer; publish this matching companion source under its own tag. Player is copied into Applications separately, not installed by the main package.
 

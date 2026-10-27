@@ -19,7 +19,7 @@ The screenshot shows the actual transport and output controls using synthetic lo
 
 ## Install
 
-Download the **Complete ZIP** from the [combined release](https://github.com/andrewvideo/intensity-shuttle-usb-3.0/releases/tag/v0.1.54-player-0.3.2). For a first installation, read the main [security preparation/restoration guide](user-guide/Read%20Me.md#security-preparation), close capture/editor/Shuttle apps and install `Shuttle-Video-0.1.54.pkg`. Copy `Shuttle Player.app` into Applications separately. Existing main 0.1.54 users can download just the Player ZIP and replace Player while it is closed. The package does not install Player, and this companion update does not change macOS security settings.
+Download the **Complete ZIP** from the [combined release](https://github.com/MasterCatsUK/intensity-shuttle-usb-3.0-driver/releases/tag/v0.1.54-player-0.3.2). For a first installation, read the main [security preparation/restoration guide](user-guide/Read%20Me.md#security-preparation), close capture/editor/Shuttle apps and install `Shuttle-Video-0.1.54.pkg`. Copy `Shuttle Player.app` into Applications separately. Existing main 0.1.54 users can download just the Player ZIP and replace Player while it is closed. The package does not install Player, and this companion update does not change macOS security settings.
 
 ## Limits and checks
 

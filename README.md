@@ -2,11 +2,13 @@
 
 # Shuttle Video + Shuttle Player + Driver
 
-Capture VHS, record with a choice of codecs, play movies and monitor editing timelines on an Intensity Shuttle USB 3.0 or a chosen Mac display.
+An independent macOS driver and two companion apps for bringing **Intensity Shuttle USB 3.0** hardware back into use on modern Macs. Developed and tested on an **Apple-silicon Mac Studio**.
+
+Capture VHS, record with a choice of codecs, play local and supported web videos, and monitor Final Cut Pro or Premiere Pro timelines on the Shuttle or a chosen Mac display. This project supports the **USB 3.0 model**; it does not support the Thunderbolt Shuttle.
 
 **Shuttle Video 0.1.54 + Shuttle Player 0.3.2 — experimental development release.** Capture, editor monitoring and movie/web-video playback in one project. Shuttle Video was formerly Shuttle Camera. Independent community project; not affiliated with Blackmagic Design, Apple, Adobe or the supported video sites.
 
-[Download both apps](https://github.com/andrewvideo/intensity-shuttle-usb-3.0/releases/tag/v0.1.54-player-0.3.2) · [What’s new](docs/Whats-New-Player-0.3.2.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md)
+[Download apps and driver](https://github.com/MasterCatsUK/intensity-shuttle-usb-3.0-driver/releases/tag/v0.1.54-player-0.3.2) · [What’s new](docs/Whats-New-Player-0.3.2.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md)
 
 > The installer is unsigned, components are ad-hoc signed and not notarized, and the development extensions require SIP disabled. This weakens macOS protection. Read the [security preparation and restoration instructions](docs/user-guide/Read%20Me.md#security-preparation) before installing. The installer never changes security settings. macOS 14.4+ is the build target; Apple silicon is the tested platform. Intel binaries are included but Intel/older macOS runtime is untested.
 
