@@ -1,6 +1,6 @@
 <img src="unified/resources/AppIcon.png" width="128" alt="Shuttle Video SVHS cassette icon">
 
-# Shuttle Video + Shuttle Player
+# Shuttle Video + Shuttle Player + Driver
 
 Capture VHS, record with a choice of codecs, play movies and monitor editing timelines on an Intensity Shuttle USB 3.0 or a chosen Mac display.
 
