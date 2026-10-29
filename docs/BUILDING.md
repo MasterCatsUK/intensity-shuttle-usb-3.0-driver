@@ -60,7 +60,7 @@ When publishing changes, update the host/extension/HAL/plugin versions that actu
 
 ## Licences and public redistribution
 
-`COPYING` contains the project GPL text. Preserve upstream notices, the bmusb source attribution, libusb archive/licence, and libASPL/Apple licence files under `audio/vendor/libASPL`. See `THIRD-PARTY-NOTICES.md` and the publisher checklist. The SVHS project icon is new artwork generated from a text-only brief and is provided under the project licence; see unified/resources/ICON-NOTE.md. Adobe SDK headers must be obtained separately and used under Adobe's terms.
+`COPYING` contains the project GPL text. Preserve upstream notices, the bmusb source attribution, libusb archive/licence, and libASPL/Apple licence files under `audio/vendor/libASPL`. See [Credits and acknowledgements](../CREDITS.md), `THIRD-PARTY-NOTICES.md` and the publisher checklist. When adding dependencies or implementation references, update the credits and applicable notices alongside the source/build recipe. The SVHS project icon is new artwork generated from a text-only brief and is provided under the project licence; see unified/resources/ICON-NOTE.md. Adobe SDK headers must be obtained separately and used under Adobe's terms.
 
 For a normal public release, use the appropriate Developer ID signing/entitlements and notarization workflow and qualify a fresh Mac with SIP enabled. The current development bypass setup should not be described as an Apple-approved consumer installation method.
 

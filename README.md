@@ -8,7 +8,7 @@ Capture VHS, record with a choice of codecs, play local and supported web videos
 
 **Shuttle Video 0.1.54 + Shuttle Player 0.3.2 — experimental development release.** Capture, editor monitoring and movie/web-video playback in one project. Shuttle Video was formerly Shuttle Camera. Independent community project; not affiliated with Blackmagic Design, Apple, Adobe or the supported video sites.
 
-[Download apps and driver](https://github.com/MasterCatsUK/intensity-shuttle-usb-3.0-driver/releases/tag/v0.1.54-player-0.3.2) · [What’s new](docs/Whats-New-Player-0.3.2.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md)
+[Download apps and driver](https://github.com/MasterCatsUK/intensity-shuttle-usb-3.0-driver/releases/tag/v0.1.54-player-0.3.2) · [What’s new](docs/Whats-New-Player-0.3.2.md) · [User guide](docs/user-guide/Read%20Me.md) · [Build from source](docs/BUILDING.md) · [Credits](CREDITS.md)
 
 > The installer is unsigned, components are ad-hoc signed and not notarized, and the development extensions require SIP disabled. This weakens macOS protection. Read the [security preparation and restoration instructions](docs/user-guide/Read%20Me.md#security-preparation) before installing. The installer never changes security settings. macOS 14.4+ is the build target; Apple silicon is the tested platform. Intel binaries are included but Intel/older macOS runtime is untested.
 
@@ -161,6 +161,12 @@ Timecode and L/R meters have independent positions in six locations. The timecod
 - Capture is standard-definition. Listed component/HDMI input choices do not establish HD capture support. Output is limited to the formats above; there is no DaVinci Resolve output integration or selectable RGB HDMI mode.
 - PAL composite playback and composite/S-Video capture passthrough were confirmed on the tested setup. Component playback and every NTSC analogue combination are not newly qualified by that test.
 - Exact long-session latency, every codec/4K timeline workflow and fresh-machine installation remain outside comprehensive qualification. For choppy playback, compare A/V Output off/on and match timeline/output cadence before assuming a driver regression.
+
+## Credits
+
+This project builds on **Steinar H. Gunderson's bmusb USB capture driver**, **libusb**, **Victor Gaydov and contributors' libASPL**, and the **yt-dlp, QuickJS and FFmpeg** projects. Their authors' work is fundamental to making this possible. Andrew / MasterCatsUK developed and tested the macOS project with **OpenAI ChatGPT/Codex assistance**.
+
+See [full credits and acknowledgements](CREDITS.md) for authors, source links, licences, Apple/Adobe documentation, Chromium and Syphon references, Squared 5 design inspiration, artwork and development tools. [Third-party notices](THIRD-PARTY-NOTICES.md) retain the separate licensing details. No upstream endorsement is implied.
 
 ## Install, troubleshoot or contribute
 

@@ -2,9 +2,11 @@
 
 Retain all upstream copyright and licence notices when modifying or distributing this project. This summary does not replace their full licence texts.
 
-- **Project / bmusb-derived code:** GPL-2.0-or-later notices appear in project sources. `COPYING` supplies GPLv2. The original bmusb0.7.8 archive, macOS-port notes, headers and modified implementation are in `vendor/`; its own COPYING is also in the original archive. Preserve the original author credits in those files.
+See [Credits and acknowledgements](CREDITS.md) for upstream authors, the role of each dependency, implementation references and design inspiration, and the [web-helper credit index](docs/credits/WEB-HELPERS.md) for the retained yt-dlp notice catalogue.
+
+- **Project / bmusb-derived code:** bmusb is Copyright 2015 Steinar H. Gunderson and licensed GPL-2.0-or-later, as stated in its original README. GPL-2.0-or-later notices appear in project sources. `COPYING` supplies GPLv2. The original bmusb0.7.8 archive, macOS-port notes, headers and modified implementation are in `vendor/`; its own COPYING is also in the original archive. Preserve the original author credits in those files.
 - **libusb1.0.29:** LGPL-2.1-or-later as described by its upstream source. The original source archive and full COPYING are included in `vendor/libusb-1.0.29.tar.bz2`. This project builds a static library locally; take the corresponding-source/relinking obligations into account when redistributing binaries.
-- **libASPL:** full upstream licence and Apple example-code licence notices remain in `audio/vendor/libASPL/LICENSE`, `LICENSE.apple2012` and `LICENSE.apple2020`. Consult those files rather than applying the project GPL label to every upstream file.
+- **libASPL:** Copyright Victor Gaydov and contributors, MIT. The full author list remains in `audio/vendor/libASPL/AUTHORS.md`; full upstream licence and Apple example-code licence notices remain in `audio/vendor/libASPL/LICENSE`, `LICENSE.apple2012` and `LICENSE.apple2020`. Consult those files rather than applying the project GPL label to every upstream file.
 - **Apple frameworks and SDK:** platform dependencies supplied by Apple, not included here. Obtain Xcode/Command Line Tools separately under Apple's terms.
 - **Adobe Premiere Pro C++ SDK:** needed to compile the original adapter in `unified/premiere/`. Obtain separately from Adobe and comply with its terms. No Adobe SDK headers or sample code are included in this folder.
 - **SVHS project artwork:** generated specifically for this project from a text-only prompt. No third-party reference image was supplied. Included under GPL-2.0-or-later; see `unified/resources/ICON-NOTE.md`. The previous icon-pack assets are not included.
